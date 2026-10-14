@@ -77,6 +77,8 @@ class Supervisor:
 
     def __init__(self, log):
         self.log = log
+        self.trace = LOG_ROOT / 'app.log'
+        self.trace.parent.mkdir(parents=True, exist_ok=True)
         self.process = None
         self.test = False
         self.deadline = 0.0
@@ -85,6 +87,11 @@ class Supervisor:
         self.last_log = None
         self.last_verdict = None
         self.busy = threading.Lock()
+
+    def _trace(self, message):
+        stamp = datetime.datetime.now().isoformat(timespec='seconds')
+        with self.trace.open('a') as handle:
+            handle.write(f'{stamp} {message}\n')
 
     # -- state -----------------------------------------------------------------
     def running(self):
@@ -240,6 +247,8 @@ class App:
         self.stop_btn.pack(side='left')
         self.estop_btn = ttk.Button(buttons, text='急停', command=self.on_estop)
         self.estop_btn.pack(side='right')
+        self.arm_btn = ttk.Button(buttons, text='重新准备连接', command=self.on_rearm)
+        self.arm_btn.pack(side='right', padx=6)
 
         safety = ttk.LabelFrame(self.root, text='出光前确认（完整功能模式）', padding=8)
         safety.pack(fill='x', padx=10, pady=(0, 8))
@@ -273,6 +282,16 @@ class App:
     def on_test(self):
         self.supervisor.start(test=True, hours=float(self.hours.get()))
 
+    def on_rearm(self):
+        """Fallback: start a fresh session now, without touching the validity window."""
+        if self.supervisor.running():
+            self.log('桥接已在运行')
+            return
+        if self.supervisor.deadline <= time.time():
+            self.supervisor.deadline = time.time() + float(self.hours.get()) * 3600
+        self.supervisor._spawn()
+        self.log('已手动准备一个新的会话')
+
     def on_stop(self):
         self.supervisor.stop()
 
@@ -288,6 +307,7 @@ class App:
 
     # -- plumbing --------------------------------------------------------------
     def enqueue(self, message):
+        self.supervisor._trace(message)
         self.queue.put(message)
 
     def log(self, message):
@@ -303,6 +323,17 @@ class App:
         self.root.after(400, self._drain)
 
     def _refresh(self):
+        # Never let an exception break the chain: if this method stops rescheduling
+        # itself the supervisor silently stops restarting sessions, which is exactly
+        # how the auto-reconnect failed the first time it was tried on hardware.
+        try:
+            self._refresh_once()
+        except Exception as error:                           # noqa: BLE001
+            self.log(f'刷新出错（已继续）: {error!r}')
+        finally:
+            self.root.after(1000, self._refresh)
+
+    def _refresh_once(self):
         self.supervisor.tick()
         if self.supervisor.running():
             left = self.supervisor.remaining()
@@ -326,7 +357,7 @@ class App:
             widget.state(['!disabled'] if enabled else ['disabled'])
         state = 'normal' if self.supervisor.running() else 'disabled'
         self.estop_btn.state([state])
-        self.root.after(1000, self._refresh)
+        self.arm_btn.state(['!disabled'] if not self.supervisor.running() else ['disabled'])
 
 
 def main():
