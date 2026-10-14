@@ -5,6 +5,7 @@ requires a matching digest and separate motion/control/isolation authorization.
 No unreviewed job CLI, retries, reconnect, synthetic ok or homing.
 """
 import argparse
+import os
 import asyncio
 import contextlib
 import datetime
@@ -314,11 +315,35 @@ class PipelineTCPBridge:
             self.finished.set()
 
 
+class _KnownTarget(str):
+    """A BLE address that also answers .name / .address.
+
+    Subclassing str keeps BleakClient happy (it accepts a plain address), while the
+    rest of the code can keep reading .name and .address.
+    """
+
+    @property
+    def address(self):
+        return str(self)
+
+    @property
+    def name(self):
+        return 'NEJE 5 Plus'
+
+
 async def run(args, log):
     from bleak import BleakScanner
-    targets = [d for d in await BleakScanner.discover(timeout=8) if d.name == 'NEJE 5 Plus']
-    if len(targets)!=1: raise RuntimeError('Expected exactly one NEJE 5 Plus')
-    log('pipeline_ble_target', name=targets[0].name, address=targets[0].address)
+    known = getattr(args, 'device', None) or os.environ.get('NEJE_DEVICE')
+    if known:
+        # BleakScanner.discover(timeout=8) costs eight seconds on EVERY start, which is
+        # the entire gap between two sessions. When the address is already known there
+        # is nothing to discover, so connect straight to it.
+        targets = [_KnownTarget(known)]
+        log('pipeline_ble_target', name='NEJE 5 Plus', address=known, via='direct')
+    else:
+        targets = [d for d in await BleakScanner.discover(timeout=8) if d.name == 'NEJE 5 Plus']
+        if len(targets)!=1: raise RuntimeError('Expected exactly one NEJE 5 Plus')
+        log('pipeline_ble_target', name=targets[0].name, address=targets[0].address, via='scan')
     ten_mm = getattr(args, 'allow_reviewed_ten_mm_job', False)
     capture = getattr(args, 'capture_controls_without_forwarding', False)
     controls = getattr(args, 'allow_reviewed_job_controls', False)
@@ -385,6 +410,9 @@ def parse_args(argv=None):
     parser.add_argument('--expected-job-sha256',
                         help='Required for file execution; pin the separately reviewed source')
     parser.add_argument('--file-profile',choices=PROFILES,default='x-linear-zero')
+    parser.add_argument('--device',
+                        help='BLE address of the machine; skips the 8 s scan. Can also be set '
+                             'with NEJE_DEVICE')
     parser.add_argument('--transparent',action='store_true',
                         help='USB-equivalent mode: forward client GRBL bytes verbatim, with no '
                              'reviewed job and no whitelist; see docs/transparent-bridge-plan.md')

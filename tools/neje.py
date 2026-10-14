@@ -56,7 +56,7 @@ FROZEN = getattr(sys, 'frozen', False)
 INTERNAL_BRIDGE = '--internal-run-bridge'
 
 
-def build_command(seconds=DEFAULT_SECONDS, log=None, test=False):
+def build_command(seconds=DEFAULT_SECONDS, log=None, test=False, device=None):
     log = Path(log) if log else LOG_ROOT / ('neje-' + datetime.datetime.now()
                                                  .strftime('%Y%m%dT%H%M%S') + '.jsonl')
     # Frozen (PyInstaller) builds have no python interpreter or .py files next to them,
@@ -66,6 +66,8 @@ def build_command(seconds=DEFAULT_SECONDS, log=None, test=False):
                '--allow-initialization',
                '--laser-power-isolated' if test else '--laser-output-authorized',
                '--seconds', str(seconds), '--log', str(log)]
+    if device:
+        command += ['--device', device]
     return command, log
 
 

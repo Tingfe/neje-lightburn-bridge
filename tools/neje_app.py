@@ -65,7 +65,7 @@ LOG_ROOT = Path.home() / 'Library' / 'Logs' / 'NEJE'
 # passed), while sessions restarted 2 s later lose their client after about a second.
 # The BLE link and the device need time to settle between sessions, so the restart is
 # deliberately unhurried, and a session that dies almost immediately backs off further.
-RESTART_DELAY_SECONDS = 8.0
+RESTART_DELAY_SECONDS = 1.0
 FAST_DEATH_SECONDS = 5.0
 BACKOFF_SECONDS = 20.0
 SAFETY = ('护目镜（455nm）', '通风', '灭火设备在手边', '可随时切断设备主电源',
@@ -91,6 +91,7 @@ class Supervisor:
         self.sessions = 0
         self.restart_at = None
         self.last_log = None
+        self.device = None
         self.last_verdict = None
         self.busy = threading.Lock()
 
@@ -134,7 +135,7 @@ class Supervisor:
         # The bridge's wall limit is in SECONDS and must cover what is left of the
         # window (a unit slip here silently produced --seconds 1).
         command, _ = neje.build_command(seconds=int(max(60, self.remaining())),
-                                       log=path, test=self.test)
+                                       log=path, test=self.test, device=self.device)
         self.last_log = path
         self._session_start = time.time()
         self.sessions += 1
@@ -168,6 +169,7 @@ class Supervisor:
             if self.process.poll() is None:
                 return
             self.process = None
+            self.device = self.device or self._remember_address(self.last_log)
             self.last_verdict = self._audit(self.last_log)
             if self.deadline <= time.time():
                 self.log('有效时间已用完，桥接不再重启')
@@ -199,6 +201,19 @@ class Supervisor:
         except Exception:                                    # noqa: BLE001
             return False
         return False
+
+    def _remember_address(self, path):
+        """Learn the machine's address from the session log so the next start is direct."""
+        if not path or not path.exists():
+            return None
+        for line in path.read_text(errors='replace').splitlines():
+            if 'pipeline_ble_target' not in line:
+                continue
+            try:
+                return json.loads(line).get('address')
+            except Exception:                                # noqa: BLE001
+                return None
+        return None
 
     def _audit(self, path):
         if not path or not path.exists():
