@@ -148,6 +148,11 @@ def main():
                         help='Laser physically isolated: safe for checking the setup')
     parser.add_argument('--dry-run', action='store_true',
                         help='Print the exact command without starting anything')
+    parser.add_argument('--valid-for', type=float, default=DEFAULT_SECONDS / 3600,
+                        metavar='HOURS',
+                        help='How long the bridge stays available (default: 7 hours). Within '
+                             'this window LightBurn may disconnect and reconnect freely; each '
+                             'connection still gets a brand new session')
     parser.add_argument('--check', action='store_true',
                         help='Check the device mode over BLE and exit (use when no session '
                              'is running: it contends for the radio otherwise)')
@@ -165,12 +170,14 @@ def main():
             return 0
         print(f'  ✗ 设备不在 GRBL 模式（{detail}）—— 请断电重启设备后再试')
         return 1
-    command, log = build_command(test=args.test)
+    seconds = int(max(1, min(args.valid_for, DEFAULT_SECONDS / 3600)) * 3600)
+    command, log = build_command(seconds=seconds, test=args.test)
     log.parent.mkdir(parents=True, exist_ok=True)
 
     print('NEJE 5 Plus over Bluetooth for LightBurn')
     print(f'  模式: {"激光隔离（试跑）" if args.test else "完整功能（激光已供电）"}')
-    print(f'  会话: {DEFAULT_SECONDS // 3600} 小时  日志: {log}')
+    print(f'  有效时间: {seconds / 3600:g} 小时  日志: {log}')
+    print('  结束方式: 会话结束后本程序退出（LightBurn 断开重连需再运行一次）')
     if not args.test:
         print('  出光前请确认: ' + ' / '.join(SAFETY_LINES))
     print('  LightBurn: 连接 TCP 设备 127.0.0.1:4002，然后照常 Start / 回零 / 改设置')

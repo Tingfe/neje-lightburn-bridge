@@ -328,7 +328,8 @@ async def run(args, log):
         # accepted trade-offs are recorded in docs/transparent-bridge-plan.md.
         log('pipeline_transparent_mode', usb_equivalent=True, reviewed_job_required=False,
             whitelist=False, plan='docs/transparent-bridge-plan.md', authorization_required=True)
-        bridge = PipelineTCPBridge(targets[0], log, args.seconds, transparent=True)
+        bridge = PipelineTCPBridge(targets[0], log, args.seconds, transparent=True,
+)
     elif file_review is not None:
         log('pipeline_file_review', source_sha256=file_review.sha256,
             review=file_review.summary(), execution_requested=True,
