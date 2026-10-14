@@ -302,6 +302,16 @@ class App:
         ttk.Button(setup, text='扫描设备', command=self.on_scan).pack(side='right')
         ttk.Button(setup, text='添加步骤', command=self.on_steps).pack(side='right', padx=6)
 
+        pick = ttk.Frame(self.root, padding=(10, 0, 10, 8))
+        pick.pack(fill='x')
+        ttk.Label(pick, text='使用哪台设备').pack(side='left')
+        self.pick = tk.StringVar(value='（先点「扫描设备」）')
+        self.picker = ttk.Combobox(pick, textvariable=self.pick, width=52, state='readonly')
+        self.picker.pack(side='left', padx=6)
+        self.picker['values'] = ['（先点「扫描设备」）']
+        ttk.Button(pick, text='使用选中的设备', command=self.on_pick).pack(side='left')
+        self.found = []
+
         safety = ttk.LabelFrame(self.root, text='出光前确认（完整功能模式）', padding=8)
         safety.pack(fill='x', padx=10, pady=(0, 8))
         ttk.Label(safety, text=' · '.join(SAFETY), foreground='#8a1f11',
@@ -334,20 +344,29 @@ class App:
                 self.enqueue(f'扫描失败：{error!r}')
                 return
             neje = device_setup.candidates(rows)
-            self.enqueue(f'发现 {len(rows)} 个蓝牙设备')
-            for name, address in rows[:12]:
+            self.found = rows
+            labels = [f'{name}  {address}' for name, address in rows]
+            self.root.after(0, lambda: self.picker.configure(values=labels or ['（没发现设备）']))
+            self.enqueue(f'发现 {len(rows)} 个蓝牙设备（前 10）：')
+            for name, address in rows[:10]:
                 self.enqueue(f'   {name}  {address}')
-            if len(rows) > 12:
-                self.enqueue(f'   …另有 {len(rows) - 12} 个（多为手机/耳机等）')
-            if len(neje) == 1:
-                self.supervisor.device = neje[0][1]
-                self.enqueue(f'✓ 已选中 {neje[0][0]}（{neje[0][1]}），以后启动直连不再扫描')
-            elif not neje:
-                self.enqueue('⚠️ 没发现名字含 NEJE 的设备 —— 确认机器已上电')
+            if neje:
+                self.enqueue(f'✓ 其中 {len(neje)} 个看起来是目标设备 —— 在上方下拉框选中后点「使用选中的设备」')
+                first = f'{neje[0][0]}  {neje[0][1]}'
+                self.root.after(0, lambda: self.pick.set(first))
             else:
-                self.enqueue(f'⚠️ 发现 {len(neje)} 个 NEJE 设备，请在命令行用 --device 指定')
+                self.enqueue('⚠️ 没发现名字含 NEJE 的设备 —— 确认机器已上电，然后重扫')
 
         threading.Thread(target=work, daemon=True).start()
+
+    def on_pick(self):
+        label = self.pick.get()
+        for name, address in getattr(self, 'found', []):
+            if label.startswith(name) and address in label:
+                self.supervisor.device = address
+                self.log(f'✓ 已选用 {name}（{address}）；以后启动直连、不再扫描')
+                return
+        self.log('请在「扫描设备」后，从下拉框里选一台')
 
     def on_steps(self):
         self.log(device_setup.add_instructions())
