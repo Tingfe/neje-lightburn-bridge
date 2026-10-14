@@ -1,3 +1,8 @@
+# evidence/ is deliberately not part of the repository; tests that read real captures
+# skip themselves explicitly rather than failing or pretending to pass.
+import os as _os, unittest as _unittest
+if not _os.path.isdir(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), '..', 'evidence')):
+    raise _unittest.SkipTest('evidence/ is not part of this repository')
 import copy
 from pathlib import Path
 import sys
