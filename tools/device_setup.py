@@ -14,7 +14,12 @@ answer:
 Nothing here writes to LightBurn's configuration.
 """
 import asyncio
+import datetime
 import json
+import re
+import shutil
+import subprocess
+import time
 from pathlib import Path
 
 PREFS = Path.home() / 'Library/Preferences/LightBurn/prefs.ini'
@@ -78,6 +83,97 @@ def lightburn_tcp_device(port=BRIDGE_PORT):
         if str(net) == str(port):
             names.append(device.get('DisplayName') or device.get('Name') or '?')
     return names
+
+
+def lightburn_running():
+    return subprocess.run(['pgrep', '-x', 'LightBurn'],
+                          capture_output=True).returncode == 0
+
+
+def quit_lightburn(wait=25):
+    """Ask LightBurn to exit and wait for it, because it writes prefs.ini on the way out.
+
+    Editing the file while LightBurn runs is pointless: it rewrites the device list from
+    memory, which is exactly how the previously working TCP device disappeared.
+    """
+    if not lightburn_running():
+        return True
+    subprocess.run(['osascript', '-e', 'quit app "LightBurn"'], capture_output=True)
+    deadline = time.time() + wait
+    while time.time() < deadline:
+        if not lightburn_running():
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def _block_span(text):
+    start = text.find('[', text.find('"DeviceList"'))
+    depth = 0
+    for index in range(start, len(text)):
+        if text[index] == '[':
+            depth += 1
+        elif text[index] == ']':
+            depth -= 1
+            if depth == 0:
+                return start, index + 1
+    raise ValueError('DeviceList not found')
+
+
+def build_device(devices, port=BRIDGE_PORT, name='LaserLink NEJE5 (蓝牙桥接)'):
+    """Synthesise a TCP device from the best template LightBurn already has.
+
+    A TCP entry that works is the ideal template; otherwise the first GRBL device is
+    converted. The GRBL profile is kept, since that is what the machine speaks.
+    """
+    template = next((d for d in devices
+                     if str(d.get('Type', '')).upper() == 'TCP'
+                     and str(d.get('NetworkPort') or d.get('Settings', {}).get('NetworkPort')) == str(port)),
+                    None)
+    if template is None:
+        template = next((d for d in devices if str(d.get('Name', '')).upper() == 'GRBL'), None)
+    if template is None:
+        template = next((d for d in devices if d.get('Type')), None)
+    if template is None:
+        raise ValueError('LightBurn has no device to use as a template')
+    device = json.loads(json.dumps(template))
+    device['DisplayName'] = name
+    device['Type'] = 'TCP'
+    device['Info'] = '127.0.0.1'
+    device['NetworkPort'] = port
+    device.pop('CommPort', None)
+    device['GUID'] = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')[:12]
+    device['HomeOnStartup'] = False
+    return device
+
+
+def add_tcp_device(apply=False, port=BRIDGE_PORT):
+    """Add the bridge as a LightBurn device. Returns (changed, message)."""
+    devices = _devices()
+    if devices is None:
+        return False, f'找不到 LightBurn 配置：{PREFS}'
+    for device in devices:
+        net = device.get('NetworkPort') or device.get('Settings', {}).get('NetworkPort')
+        if str(device.get('Type', '')).upper() == 'TCP' and str(net) == str(port):
+            return False, f'已存在指向 127.0.0.1:{port} 的设备：{device.get("DisplayName")}'
+    device = build_device(devices, port=port)
+    if not apply:
+        return True, ('干跑：将新增设备 ' + json.dumps({k: device[k] for k in
+                      ('DisplayName', 'Type', 'Info', 'NetworkPort', 'Name', 'ProfilePath')},
+                      ensure_ascii=False))
+    if lightburn_running():
+        return False, 'LightBurn 正在运行：它会用内存里的设备表覆盖配置，请先关闭'
+    text = PREFS.read_text(errors='replace')
+    start, end = _block_span(text)
+    devices.append(device)
+    backup = PREFS.with_name(f'prefs.ini.neje-backup-{datetime.datetime.now():%Y%m%dT%H%M%S}')
+    shutil.copy2(PREFS, backup)
+    PREFS.write_text(text[:start] + json.dumps(devices, indent=4) + text[end:])
+    check = lightburn_tcp_device(port)
+    if not check:
+        shutil.copy2(backup, PREFS)
+        return False, f'写入后校验失败，已回滚（备份仍在 {backup}）'
+    return True, f'已新增设备「{device["DisplayName"]}」（备份 {backup.name}）'
 
 
 def add_instructions(port=BRIDGE_PORT):

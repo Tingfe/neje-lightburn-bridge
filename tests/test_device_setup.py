@@ -44,3 +44,57 @@ class DeviceSetupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CreateLightBurnDeviceTests(unittest.TestCase):
+    """Synthesising the device must be reversible and must never lose an entry."""
+
+    DEVICES = [{'DisplayName': 'No Machine', 'Type': None},
+               {'DisplayName': 'GRBL', 'Type': 'Serial', 'Name': 'GRBL',
+                'ProfilePath': 'GRBL', 'CommPort': '(Choose)', 'Settings': {}}]
+
+    def test_a_serial_grbl_device_becomes_a_tcp_device_on_the_bridge_port(self):
+        device = device_setup.build_device(self.DEVICES)
+        self.assertEqual(device['Type'], 'TCP')
+        self.assertEqual(device['NetworkPort'], device_setup.BRIDGE_PORT)
+        self.assertEqual(device['Info'], '127.0.0.1')
+        self.assertEqual(device['ProfilePath'], 'GRBL')
+        self.assertNotIn('CommPort', device)
+        self.assertNotEqual(device['GUID'], self.DEVICES[1].get('GUID'))
+
+    def test_the_template_is_not_mutated(self):
+        device_setup.build_device(self.DEVICES)
+        self.assertEqual(self.DEVICES[1]['Type'], 'Serial')
+
+    def test_an_existing_device_on_the_same_port_is_never_duplicated(self):
+        original_read, original_running = device_setup._devices, device_setup.lightburn_running
+        try:
+            device_setup._devices = lambda: self.DEVICES + [
+                {'DisplayName': 'Already', 'Type': 'TCP', 'NetworkPort': device_setup.BRIDGE_PORT}]
+            device_setup.lightburn_running = lambda: False
+            changed, message = device_setup.add_tcp_device(apply=True)
+            self.assertFalse(changed)
+            self.assertIn('已存在', message)
+        finally:
+            device_setup._devices, device_setup.lightburn_running = original_read, original_running
+
+    def test_it_refuses_to_write_while_lightburn_runs(self):
+        original_read, original_running = device_setup._devices, device_setup.lightburn_running
+        try:
+            device_setup._devices = lambda: self.DEVICES
+            device_setup.lightburn_running = lambda: True
+            changed, message = device_setup.add_tcp_device(apply=True)
+            self.assertFalse(changed)
+            self.assertIn('正在运行', message)
+        finally:
+            device_setup._devices, device_setup.lightburn_running = original_read, original_running
+
+    def test_dry_run_changes_nothing(self):
+        original_read = device_setup._devices
+        try:
+            device_setup._devices = lambda: self.DEVICES
+            changed, message = device_setup.add_tcp_device(apply=False)
+            self.assertTrue(changed)
+            self.assertIn('干跑', message)
+        finally:
+            device_setup._devices = original_read
