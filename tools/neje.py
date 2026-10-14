@@ -29,7 +29,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = ROOT / 'tools' / 'pipeline_tcp_bridge.py'
 PYTHON = sys.executable
-DEFAULT_SECONDS = 25200                     # 7 hours, the bridge's own ceiling
+DEFAULT_SECONDS = 25200
+
+
+def data_root():
+    """Where logs live.
+
+    A frozen build unpacks into a temporary directory, so writing logs next to the
+    program would lose them the moment it exits -- and the audit needs to read the
+    capture back afterwards. Frozen builds therefore use a stable per-user location.
+    """
+    if getattr(sys, 'frozen', False):
+        return Path.home() / 'Library' / 'Logs' / 'NEJE'
+    return ROOT / 'logs'
+
+
+LOG_ROOT = data_root()                     # 7 hours, the bridge's own ceiling
 SAFETY_LINES = (
     '护目镜 / 通风 / 灭火 / 可独立断电 / 行程净空 / 手离开',
     '只有设备自身的电源能真正停下机器 —— 出事先断它的电',
@@ -37,10 +52,17 @@ SAFETY_LINES = (
 )
 
 
+FROZEN = getattr(sys, 'frozen', False)
+INTERNAL_BRIDGE = '--internal-run-bridge'
+
+
 def build_command(seconds=DEFAULT_SECONDS, log=None, test=False):
-    log = Path(log) if log else ROOT / 'logs' / ('neje-' + datetime.datetime.now()
+    log = Path(log) if log else LOG_ROOT / ('neje-' + datetime.datetime.now()
                                                  .strftime('%Y%m%dT%H%M%S') + '.jsonl')
-    command = [PYTHON, str(BRIDGE), '--transparent', '--allow-transparent-bridge', '--execute',
+    # Frozen (PyInstaller) builds have no python interpreter or .py files next to them,
+    # so the same executable re-enters itself to run the bridge in-process.
+    launcher = [sys.executable, INTERNAL_BRIDGE] if FROZEN else [PYTHON, str(BRIDGE)]
+    command = launcher + ['--transparent', '--allow-transparent-bridge', '--execute',
                '--allow-initialization',
                '--laser-power-isolated' if test else '--laser-output-authorized',
                '--seconds', str(seconds), '--log', str(log)]
@@ -173,5 +195,15 @@ def main():
     return audit_after(log) or code
 
 
+def _run_bridge_in_process():
+    """Multi-call entry used by frozen builds: become the bridge."""
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import pipeline_tcp_bridge
+    sys.argv = ['pipeline_tcp_bridge.py', *sys.argv[2:]]
+    return pipeline_tcp_bridge.main()
+
+
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == INTERNAL_BRIDGE:
+        raise SystemExit(_run_bridge_in_process())
     raise SystemExit(main())
