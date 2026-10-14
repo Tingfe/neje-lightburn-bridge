@@ -65,7 +65,8 @@ LOG_ROOT = Path.home() / 'Library' / 'Logs' / 'NEJE'
 # passed), while sessions restarted 2 s later lose their client after about a second.
 # The BLE link and the device need time to settle between sessions, so the restart is
 # deliberately unhurried, and a session that dies almost immediately backs off further.
-RESTART_DELAY_SECONDS = 1.0
+RESTART_DELAY_SECONDS = 0.2          # settle time only; the port is polled
+TICK_SECONDS = 0.1                    # supervisor loop interval, independent of the UI
 FAST_DEATH_SECONDS = 5.0
 BACKOFF_SECONDS = 20.0
 SAFETY = ('护目镜（455nm）', '通风', '灭火设备在手边', '可随时切断设备主电源',
@@ -156,7 +157,11 @@ class Supervisor:
         """Called from the UI loop: restart between sessions inside the window."""
         with self.busy:
             if self.restart_at is not None:
-                if time.time() >= self.restart_at:
+                # Wait for the settle time AND for the old listener to be gone, then
+                # start at once. Polling the port is what makes the gap imperceptible
+                # instead of a fixed delay the operator has to sit through.
+                ready = time.time() >= self.restart_at and not port_in_use()
+                if ready:
                     self.restart_at = None
                     if self.deadline > time.time():
                         self._spawn()
@@ -180,7 +185,8 @@ class Supervisor:
             if lived < FAST_DEATH_SECONDS:
                 delay = BACKOFF_SECONDS
                 self.log(f'上一个会话只活了 {lived:.0f} 秒（异常），退避 {delay:g} 秒再试')
-            self.log(f'会话结束，{delay:g} 秒后自动准备下一个连接')
+            else:
+                self.log('会话结束，立刻准备下一个连接')
             self.restart_at = time.time() + delay
 
     # -- helpers ---------------------------------------------------------------
@@ -241,9 +247,19 @@ class App:
         root.geometry('760x610')
         root.minsize(680, 560)
         self._build()
+        threading.Thread(target=self._supervise, daemon=True).start()
         root.after(500, self._drain)
         root.after(1000, self._refresh)
         self.log('准备就绪。确认安全条件后点「启动（完整功能）」。')
+
+    def _supervise(self):
+        """Fast, independent of the UI: keeps the reconnect gap to a fraction of a second."""
+        while True:
+            try:
+                self.supervisor.tick()
+            except Exception as error:                       # noqa: BLE001
+                self.enqueue(f'监督器出错（已继续）: {error!r}')
+            time.sleep(TICK_SECONDS)
 
     # -- ui --------------------------------------------------------------------
     def _build(self):
