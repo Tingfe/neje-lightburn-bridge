@@ -1,0 +1,25 @@
+# 实验证据与本地运行产物（体量大、含设备标识与内网地址，不进仓库）
+evidence/
+sessions/
+sessions-*/
+logs/
+*.jsonl
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 打包产物
+build/
+dist/
+*.spec.bak
+
+# macOS
+.DS_Store
+
+# 编辑器
+.idea/
+.vscode/
