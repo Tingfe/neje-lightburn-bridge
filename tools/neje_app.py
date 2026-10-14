@@ -61,7 +61,13 @@ _ensure_tkinter()
 
 ROOT = neje.ROOT
 LOG_ROOT = Path.home() / 'Library' / 'Logs' / 'NEJE'
-RESTART_DELAY_SECONDS = 2.0
+# Measured: the FIRST session after the app starts is healthy (17 s, 32 lines, audit
+# passed), while sessions restarted 2 s later lose their client after about a second.
+# The BLE link and the device need time to settle between sessions, so the restart is
+# deliberately unhurried, and a session that dies almost immediately backs off further.
+RESTART_DELAY_SECONDS = 8.0
+FAST_DEATH_SECONDS = 5.0
+BACKOFF_SECONDS = 20.0
 SAFETY = ('护目镜（455nm）', '通风', '灭火设备在手边', '可随时切断设备主电源',
           '行程净空', '手离开机器')
 
@@ -167,8 +173,13 @@ class Supervisor:
                 self.log('有效时间已用完，桥接不再重启')
                 self.deadline = 0.0
                 return
-            self.log(f'会话结束，{RESTART_DELAY_SECONDS:g} 秒后自动准备下一个连接')
-            self.restart_at = time.time() + RESTART_DELAY_SECONDS
+            lived = time.time() - self._session_start
+            delay = RESTART_DELAY_SECONDS
+            if lived < FAST_DEATH_SECONDS:
+                delay = BACKOFF_SECONDS
+                self.log(f'上一个会话只活了 {lived:.0f} 秒（异常），退避 {delay:g} 秒再试')
+            self.log(f'会话结束，{delay:g} 秒后自动准备下一个连接')
+            self.restart_at = time.time() + delay
 
     # -- helpers ---------------------------------------------------------------
     def _log_has(self, event, since=None):
@@ -355,8 +366,8 @@ class App:
                                 (self.test_btn, not self.supervisor.running()),
                                 (self.stop_btn, self.supervisor.running())):
             widget.state(['!disabled'] if enabled else ['disabled'])
-        state = 'normal' if self.supervisor.running() else 'disabled'
-        self.estop_btn.state([state])
+        # ttk states are 'disabled' / '!disabled'; a bare 'normal' raises TclError.
+        self.estop_btn.state(['!disabled'] if self.supervisor.running() else ['disabled'])
         self.arm_btn.state(['!disabled'] if not self.supervisor.running() else ['disabled'])
 
 
