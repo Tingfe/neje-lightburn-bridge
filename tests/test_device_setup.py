@@ -98,3 +98,30 @@ class CreateLightBurnDeviceTests(unittest.TestCase):
             self.assertIn('干跑', message)
         finally:
             device_setup._devices = original_read
+
+
+class StatusWordingTests(unittest.TestCase):
+    """The status line reads a FILE; it must not claim LightBurn has accepted anything."""
+
+    def with_state(self, names, running):
+        original = (device_setup.lightburn_tcp_device, device_setup.lightburn_running)
+        device_setup.lightburn_tcp_device = lambda port=device_setup.BRIDGE_PORT: names
+        device_setup.lightburn_running = lambda: running
+        try:
+            return device_setup.status_text()
+        finally:
+            device_setup.lightburn_tcp_device, device_setup.lightburn_running = original
+
+    def test_it_never_says_the_device_is_ready(self):
+        for running in (True, False):
+            text, _ = self.with_state(['Bridge'], running)
+            self.assertNotIn('已就绪', text)
+            self.assertIn('Bridge', text)
+
+    def test_it_says_confirmation_needs_lightburn_itself(self):
+        text, _ = self.with_state(['Bridge'], running=False)
+        self.assertIn('尚未在 LightBurn 中确认', text)
+
+    def test_a_running_lightburn_is_reported_as_such(self):
+        text, _ = self.with_state(['Bridge'], running=True)
+        self.assertIn('正在运行', text)

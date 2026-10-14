@@ -188,13 +188,24 @@ def add_instructions(port=BRIDGE_PORT):
 
 
 def status_text():
-    """One line for the control panel."""
+    """One line for the control panel, saying only what was actually checked.
+
+    This reads LightBurn's configuration FILE. It cannot know whether LightBurn accepts
+    the entry -- only a LightBurn start can show that -- so it must not claim the device
+    is ready.
+    """
     names = lightburn_tcp_device()
     if names is None:
-        return ('⚠️ 找不到 LightBurn 的配置（LightBurn 是否安装过？）', False)
+        return ('⚠️ 找不到 LightBurn 的配置文件（LightBurn 装过吗？）', False)
     if not names:
-        return (f'⚠️ LightBurn 里还没有指向 127.0.0.1:{BRIDGE_PORT} 的设备 —— 点「添加步骤」', False)
-    return (f'✅ LightBurn 设备已就绪：{", ".join(names)}', True)
+        return (f'⚠️ 配置里还没有指向 127.0.0.1:{BRIDGE_PORT} 的设备 —— '
+                '点「创建 LightBurn 设备」或「添加步骤」', False)
+    listed = '、'.join(names)
+    if lightburn_running():
+        return (f'LightBurn 正在运行；配置文件里有「{listed}」'
+                '（本次启动是否显示它，需要在 LightBurn 里看一眼）', True)
+    return (f'配置文件里已有「{listed}」（尚未在 LightBurn 中确认：启动 LightBurn 看它是否出现在设备列表）',
+            True)
 
 
 if __name__ == '__main__':
