@@ -30,6 +30,7 @@ from tkinter import messagebox, scrolledtext, ttk
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import neje
+import device_setup
 
 
 def _ensure_tkinter():
@@ -292,6 +293,15 @@ class App:
         self.arm_btn = ttk.Button(buttons, text='重新准备连接', command=self.on_rearm)
         self.arm_btn.pack(side='right', padx=6)
 
+        setup = ttk.Frame(self.root, padding=(10, 0, 10, 8))
+        setup.pack(fill='x')
+        text, ok = device_setup.status_text()
+        self.setup = tk.StringVar(value=text)
+        ttk.Label(setup, textvariable=self.setup, foreground='#1a6b2a' if ok else '#8a1f11',
+                  wraplength=520, justify='left').pack(side='left')
+        ttk.Button(setup, text='扫描设备', command=self.on_scan).pack(side='right')
+        ttk.Button(setup, text='添加步骤', command=self.on_steps).pack(side='right', padx=6)
+
         safety = ttk.LabelFrame(self.root, text='出光前确认（完整功能模式）', padding=8)
         safety.pack(fill='x', padx=10, pady=(0, 8))
         ttk.Label(safety, text=' · '.join(SAFETY), foreground='#8a1f11',
@@ -313,6 +323,35 @@ class App:
         self.text.configure(state='disabled')
 
     # -- actions ---------------------------------------------------------------
+    def on_scan(self):
+        """List what is actually advertising, so a new or renamed device is findable."""
+        self.log('正在扫描蓝牙设备（约 6 秒）…')
+
+        def work():
+            try:
+                rows = device_setup.scan(6.0)
+            except Exception as error:                       # noqa: BLE001
+                self.enqueue(f'扫描失败：{error!r}')
+                return
+            neje = device_setup.candidates(rows)
+            self.enqueue(f'发现 {len(rows)} 个蓝牙设备')
+            for name, address in rows[:12]:
+                self.enqueue(f'   {name}  {address}')
+            if len(rows) > 12:
+                self.enqueue(f'   …另有 {len(rows) - 12} 个（多为手机/耳机等）')
+            if len(neje) == 1:
+                self.supervisor.device = neje[0][1]
+                self.enqueue(f'✓ 已选中 {neje[0][0]}（{neje[0][1]}），以后启动直连不再扫描')
+            elif not neje:
+                self.enqueue('⚠️ 没发现名字含 NEJE 的设备 —— 确认机器已上电')
+            else:
+                self.enqueue(f'⚠️ 发现 {len(neje)} 个 NEJE 设备，请在命令行用 --device 指定')
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_steps(self):
+        self.log(device_setup.add_instructions())
+
     def on_start(self):
         if not messagebox.askokcancel(
                 '确认安全条件',
