@@ -19,8 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
---- 
-安全提示：本软件用于驱动激光雕刻机。激光可致盲、可引燃。使用前请阅读
-docs/level-e-test-plan.md 与 docs/daily-use-guide.md，并始终保留可随时切断
-设备主电源的能力。作者不对任何人身伤害、火灾或财产损失负责。
