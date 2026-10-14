@@ -202,6 +202,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scan', action='store_true', help='List nearby BLE devices')
     parser.add_argument('--seconds', type=float, default=6.0)
+    parser.add_argument('--add-lightburn-device', action='store_true',
+                        help='Add the bridge as a LightBurn TCP device (dry run unless --apply)')
+    parser.add_argument('--apply', action='store_true',
+                        help='With --add-lightburn-device: actually write prefs.ini')
     args = parser.parse_args()
     if args.scan:
         rows = scan(args.seconds)
@@ -209,6 +213,9 @@ if __name__ == '__main__':
         for name, address in rows:
             mark = '  ← NEJE' if NAME_HINT in name.upper() else ''
             print(f'  {name:28s} {address}{mark}')
+    if args.add_lightburn_device:
+        changed, message = add_tcp_device(apply=args.apply)
+        print(('✅ ' if changed else 'ℹ️ ') + message)
     text, ok = status_text()
     print(text)
     if not ok:

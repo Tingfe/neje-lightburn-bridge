@@ -310,6 +310,7 @@ class App:
         self.picker.pack(side='left', padx=6)
         self.picker['values'] = ['（先点「扫描设备」）']
         ttk.Button(pick, text='使用选中的设备', command=self.on_pick).pack(side='left')
+        ttk.Button(pick, text='创建 LightBurn 设备', command=self.on_create_device).pack(side='left', padx=6)
         self.found = []
 
         safety = ttk.LabelFrame(self.root, text='出光前确认（完整功能模式）', padding=8)
@@ -367,6 +368,31 @@ class App:
                 self.log(f'✓ 已选用 {name}（{address}）；以后启动直连、不再扫描')
                 return
         self.log('请在「扫描设备」后，从下拉框里选一台')
+
+    def on_create_device(self):
+        """Write the TCP device LightBurn needs, closing LightBurn first if necessary."""
+        changed, message = device_setup.add_tcp_device(apply=False)
+        if not changed:
+            self.log(message)
+            return
+        if device_setup.lightburn_running():
+            if not messagebox.askokcancel('需要先关闭 LightBurn',
+                                          'LightBurn 正在运行，它会在退出时用自己的设备表覆盖配置。\n\n'
+                                          '现在就关闭 LightBurn 并继续？'):
+                return
+            if not device_setup.quit_lightburn():
+                self.log('没能自动关闭 LightBurn，请手动退出后重试')
+                return
+            self.log('已关闭 LightBurn')
+        if not messagebox.askokcancel('创建 LightBurn 设备',
+                                      '将向 LightBurn 配置新增一个 TCP 设备 '
+                                      f'(127.0.0.1:{device_setup.BRIDGE_PORT})。\n'
+                                      '会先做时间戳备份；写入后校验，失败自动回滚。\n\n继续？'):
+            return
+        changed, message = device_setup.add_tcp_device(apply=True)
+        self.log(('✅ ' if changed else '⚠️ ') + message)
+        text, ok = device_setup.status_text()
+        self.setup.set(text)
 
     def on_steps(self):
         self.log(device_setup.add_instructions())
