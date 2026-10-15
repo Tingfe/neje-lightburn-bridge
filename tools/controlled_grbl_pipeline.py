@@ -145,6 +145,7 @@ class ControlledGrblPipeline(GrblPipeline):
         if wire == b'\x18':
             self.log('control_unsent_discarded', queued_bytes=self.queued_bytes,
                      sequences=[line.sequence for line in self.queued],
+                     lines=[dict(sequence=line.sequence, hex=line.wire.hex()) for line in self.queued],
                      queued_statuses=len(self.controls),
                      partial_unsent_bytes=(len(self.partial.wire)-self.partial.attempted)
                          if self.partial else 0,

@@ -8,7 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from reviewed_job import JOB
 from reviewed_job_bridge import JobChannel, ReviewedJobBridge
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 
 
 class ChannelTests(unittest.IsolatedAsyncioTestCase):

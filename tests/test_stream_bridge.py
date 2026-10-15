@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from stream_tcp_bridge import StreamBridge,OutputLines
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 
 class OutputTests(unittest.TestCase):
     def test_interleaved_push_messages_do_not_manufacture_terminals(self):

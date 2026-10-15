@@ -10,7 +10,7 @@ from neje_byte_stream import ByteStreamSession
 from tcp_readonly_bridge import ReliableSession
 from neje_protocol import SYSTEM_READ_ALL
 from grbl_readonly import DISABLE_RELIABLE
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 
 INFO=bytes.fromhex('ff aa 08 10 01 01 00 55')
 SYSTEM_REPLY=bytes.fromhex('ffaa15100101ff37030200014e4e424b4a32585055')

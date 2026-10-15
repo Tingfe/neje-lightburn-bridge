@@ -5,7 +5,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from grbl_pipeline import GrblPipeline
 from neje_byte_stream import ByteStreamSession
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 
 
 class DeferredSession:

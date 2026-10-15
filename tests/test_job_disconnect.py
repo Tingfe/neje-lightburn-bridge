@@ -24,7 +24,7 @@ from reviewed_ten_mm import wire_lines
 from inspect_job_disconnect_route import require_owned,run as inspect_route
 from neje_protocol import GRBL_COMM_STATUS,VERIFY,SYSTEM_READ_INFO
 from grbl_readonly import DISABLE_RELIABLE
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 import test_controlled_tcp as fixtures
 
 

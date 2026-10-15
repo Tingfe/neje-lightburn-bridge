@@ -26,7 +26,8 @@ class DeviceSetupTests(unittest.TestCase):
         handle = tempfile.NamedTemporaryFile('w', suffix='.ini', delete=False)
         handle.write('"DeviceList": ' + json.dumps([
             {'DisplayName': 'USB one', 'Type': 'Serial'},
-            {'DisplayName': 'Bridge', 'Type': 'TCP', 'NetworkPort': 4002},
+            {'DisplayName': 'Bridge', 'Type': 'TCP', 'NetworkPort': 4002, 'Info': '127.0.0.1'},
+            {'DisplayName': 'Remote', 'Type': 'TCP', 'NetworkPort': 4002, 'Info': '192.168.8.20'},
             {'DisplayName': 'Elsewhere', 'Type': 'TCP', 'NetworkPort': 9999},
         ]))
         handle.close()
@@ -57,6 +58,7 @@ class CreateLightBurnDeviceTests(unittest.TestCase):
         device = device_setup.build_device(self.DEVICES)
         self.assertEqual(device['Type'], 'TCP')
         self.assertEqual(device['NetworkPort'], device_setup.BRIDGE_PORT)
+        self.assertEqual(device['Settings']['NetworkPort'], device_setup.BRIDGE_PORT)
         self.assertEqual(device['Info'], '127.0.0.1')
         self.assertEqual(device['ProfilePath'], 'GRBL')
         self.assertNotIn('CommPort', device)
@@ -66,11 +68,22 @@ class CreateLightBurnDeviceTests(unittest.TestCase):
         device_setup.build_device(self.DEVICES)
         self.assertEqual(self.DEVICES[1]['Type'], 'Serial')
 
+    def test_nested_default_port_is_replaced_without_conflict(self):
+        template = dict(self.DEVICES[1], Settings={'NetworkPort': 23})
+        device = device_setup.build_device([template])
+        self.assertEqual(device['Settings']['NetworkPort'], 4002)
+        self.assertEqual(device['NetworkPort'], 4002)
+        self.assertEqual(template['Settings']['NetworkPort'], 23)
+
+    def test_nested_port_is_authoritative_when_legacy_field_conflicts(self):
+        self.assertEqual(device_setup.network_port({'NetworkPort': 4002, 'Settings': {'NetworkPort': 23}}), 23)
+
     def test_an_existing_device_on_the_same_port_is_never_duplicated(self):
         original_read, original_running = device_setup._devices, device_setup.lightburn_running
         try:
             device_setup._devices = lambda: self.DEVICES + [
-                {'DisplayName': 'Already', 'Type': 'TCP', 'NetworkPort': device_setup.BRIDGE_PORT}]
+                {'DisplayName': 'Already', 'Type': 'TCP', 'NetworkPort': device_setup.BRIDGE_PORT,
+                 'Info': '127.0.0.1'}]
             device_setup.lightburn_running = lambda: False
             changed, message = device_setup.add_tcp_device(apply=True)
             self.assertFalse(changed)

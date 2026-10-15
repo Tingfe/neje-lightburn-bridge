@@ -70,39 +70,27 @@ class PassthroughTests(unittest.TestCase):
         self.assertEqual(policy.forwarded_bytes, len(data))
 
 
-class JogTranslationTests(unittest.TestCase):
-    """A measured runaway means $J= cannot be forwarded as-is; it is translated into the
-    explicit relative move it always meant, and malformed forms are still refused."""
+class NativeJogTests(unittest.TestCase):
+    def test_modal_and_units_are_preserved_without_bridge_gcode(self):
+        for data in (b'$J=Y-1F100\n', b'$J=G91 G21 X1 F100\n',
+                     b'G20\n$J=G90X0.5F10\nG1X10\n',
+                     b'M4 S100\n$J=G91X1F100\n$G\n'):
+            self.assertEqual(b''.join(w for _, w in PassthroughPolicy().feed(data)), data)
 
-    def forward(self, data):
+    def test_device_judges_invalid_jog_not_a_bridge_translation(self):
+        data = b'$J=X1S500F100\n'
+        self.assertEqual(PassthroughPolicy().feed(data), [('ordinary', data)])
+
+    def test_jog_cancel_and_overrides_stay_realtime(self):
+        data = bytes([0x85, 0x90, 0x99, 0xa0])
+        self.assertEqual(PassthroughPolicy().feed(data), [('realtime', bytes([b])) for b in data])
+
+    def test_reset_preempts_oversized_input_and_closes_generation(self):
         policy = PassthroughPolicy()
-        return b''.join(wire for kind, wire in policy.feed(data) if kind == 'ordinary')
-
-    def test_the_runaway_command_becomes_a_bounded_relative_move(self):
-        self.assertEqual(self.forward(b'$J=Y-1F100\n'), b'G91 G1 Y-1 F100\n')
-
-    def test_multi_axis_jog_keeps_every_axis(self):
-        self.assertEqual(self.forward(b'$J=X10Y-10F3000\n'), b'G91 G1 X10 Y-10 F3000\n')
-
-    def test_whitespace_is_ignored_like_grbl_does(self):
-        self.assertEqual(self.forward(b' $J = Y-1 F100\n'), b'G91 G1 Y-1 F100\n')
-
-    def test_one_line_in_one_line_out_so_flow_control_holds(self):
-        policy = PassthroughPolicy()
-        result = policy.feed(b'$J=X1F100\n')
-        self.assertEqual(len(result), 1)
-
-    def test_oversized_modal_or_settings_jogs_are_refused(self):
-        for bad in (b'$J=X200F100\n', b'$J=G91X1F100\n', b'$J=X1S500F100\n',
-                    b'$J=X1\n', b'$J=X1F99999\n'):
-            policy = PassthroughPolicy()
-            with self.assertRaises(ValueError):
-                policy.feed(bad)
-            self.assertTrue(policy.failed)
-
-    def test_other_commands_still_pass_untouched(self):
-        self.assertEqual(self.forward(b'$H\n$100=80\nG0 X5\n'),
-                         b'$H\n$100=80\nG0 X5\n')
+        data = b'G1 X' + b'1' * 600 + b'\x18G1 X2\n'
+        self.assertEqual(policy.feed(data), [('cancel', b'\x18')])
+        self.assertEqual(policy.feed(b'G1 X3\n'), [])
+        self.assertEqual(policy.discarded_bytes, len(data)-1+len(b'G1 X3\n'))
 
 
 class TransparentGateTests(unittest.TestCase):

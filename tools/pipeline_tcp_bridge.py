@@ -17,6 +17,7 @@ import time
 
 from grbl_pipeline import GrblPipeline
 from controlled_grbl_pipeline import ControlledGrblPipeline
+from transparent_grbl_pipeline import TransparentGrblPipeline
 from controlled_job_policy import ControlledJobPolicy
 from controlled_reviewed_job import ControlledReviewedJob, require_empty_startup
 from lightburn_init_bridge import reported_idle
@@ -59,6 +60,19 @@ class PipelineTCPBridge:
             raise ValueError('Control review requires an explicitly reviewed job profile')
         self.control_review = control_review
         self.transparent = transparent
+        if transparent:
+            self.profile = 'native_transparent'
+        self.controls_enabled = control_review or transparent
+        self.stop_requested = False
+
+    def request_stop(self):
+        """Local owner control, without opening a second TCP/BLE connection."""
+        if not self.transparent or self.active is None:
+            self.log('pipeline_local_stop_unavailable', remote_stop_confirmed=False)
+            return False
+        self.stop_requested = True
+        self.log('pipeline_local_stop_requested', remote_stop_confirmed=False)
+        return True
 
     async def handle(self, reader, writer):
         if self.used:
@@ -119,7 +133,7 @@ class PipelineTCPBridge:
                         continue
                     while True:
                         try:
-                            if kind in ('hold', 'resume', 'cancel'):
+                            if kind in ('hold', 'resume', 'cancel', 'realtime'):
                                 # Realtime bytes must go out of band; queueing them as
                                 # ordinary data would leave them sitting in a line buffer.
                                 pipeline.realtime(wire)
@@ -129,7 +143,7 @@ class PipelineTCPBridge:
                             else: pipeline.enqueue(wire)
                             break
                         except asyncio.QueueFull:
-                            if self.control_review:
+                            if self.controls_enabled:
                                 raise RuntimeError('Control ingress overflow; fail closed instead of blocking Stop')
                             space.clear()
                             await space.wait()
@@ -149,15 +163,23 @@ class PipelineTCPBridge:
                         can_write=lambda: not eof.is_set())
                     baseline = await channel.status('pipeline_tcp_baseline')
                     buffer = re.search(r'\|Bf:(\d+),(\d+)(?:\||>)', baseline)
-                    if not reported_idle(baseline) or not buffer:
-                        raise RuntimeError('Requires Idle/FS0 and real Bf receive capacity')
+                    acceptable = reported_idle(baseline) or (self.transparent and baseline.startswith('<Alarm|'))
+                    if not acceptable or not buffer:
+                        raise RuntimeError('Requires Idle (or native Alarm recovery) and real Bf receive capacity')
                     char = client.services.get_characteristic('0000ffe9-0000-1000-8000-00805f9b34fb')
-                    pipeline_class = ControlledGrblPipeline if self.control_review else GrblPipeline
+                    pipeline_class = TransparentGrblPipeline if self.transparent else \
+                        ControlledGrblPipeline if self.control_review else GrblPipeline
                     pipeline = pipeline_class(session, deliver, self.log,
                         rx_budget=int(buffer[2])-8,
                         payload_capacity=min(256, char.max_write_without_response_size-9),
                         deliver_lines=self.motion_profile)
                     pipeline.output = channel.lines
+                    if self.transparent:
+                        def reset_observed():
+                            parser.reopen_after_reset_banner()
+                            self.log('pipeline_input_generation_opened',
+                                     real_reset_banner=True, position_trusted=False, no_replay=True)
+                        pipeline.reset_observed = reset_observed
                     if self.motion_profile:
                         job_class = ControlledReviewedJob if self.control_review else ReviewedPipelineJob
                         job = job_class(pipeline, channel, self.log,
@@ -189,6 +211,11 @@ class PipelineTCPBridge:
                     previous, deadline = None, self.clock()+8
                     next_file_poll = self.clock()
                     while not eof.is_set():
+                        if self.stop_requested and not pipeline.cancelling:
+                            self.stop_requested = False
+                            parser.cancel()
+                            pipeline.realtime(b'\x18')
+                            self.log('pipeline_local_control', hex='18')
                         if job is not None:
                             await job.advance()
                             if eof.is_set(): break
@@ -200,7 +227,7 @@ class PipelineTCPBridge:
                             next_file_poll = self.clock()+.5
                         wrote = await pipeline.step()
                         space.set()
-                        if self.control_review and pipeline.cancelled:
+                        if self.controls_enabled and pipeline.cancelled:
                             self.log('controlled_session_cancelled', status=pipeline.last_status,
                                      requires_explicit_recovery=True, no_replay=True)
                             break
@@ -210,7 +237,7 @@ class PipelineTCPBridge:
                         if key != previous or pipeline.drained:
                             response_timeout = self.job_timeout if job and job.submitted and not job.completed else 8
                             previous, deadline = key, self.clock()+response_timeout
-                        suspended = self.control_review and pipeline.ordinary_timeout_suspended
+                        suspended = self.controls_enabled and pipeline.ordinary_timeout_suspended
                         if suspended:
                             # The core retains bounded transition/status timers.
                             # Ordinary ACKs may legitimately stop during Hold.
@@ -223,12 +250,35 @@ class PipelineTCPBridge:
                     while pipeline.pending or pipeline.statuses or pipeline.output.pending:
                         await pipeline.step(receive_only=True)
                         await asyncio.sleep(.01)
+                    # A normal LightBurn TCP close ends this BLE route, not the
+                    # GUI's lifetime. Prove a fresh, power-off Idle *after* EOF
+                    # before the supervisor offers another client session. The
+                    # query is private and cannot release any queued GCode.
+                    if (self.transparent and self.failure_reason is None and
+                            not pipeline.fault and not pipeline.queued and
+                            not pipeline.pending and not pipeline.controls and
+                            not pipeline.statuses and not pipeline.output.pending and
+                            pipeline.partial is None and pipeline.urgent is None and
+                            not pipeline.cancelling and not pipeline.native_hold and
+                            not pipeline.native_probe_pending):
+                        pipeline.realtime(b'?')
+                        await pipeline.step()
+                        probe_deadline = self.clock() + 8
+                        while pipeline.statuses:
+                            if self.clock() > probe_deadline:
+                                raise TimeoutError('Missing real post-disconnect Idle status')
+                            await pipeline.step(receive_only=True)
+                            await asyncio.sleep(.01)
+                        status = pipeline.last_status
+                        self.log('pipeline_eof_idle_probe', status=status,
+                                 idle=reported_idle(status or ''),
+                                 no_replay=True, position_trusted=False)
                     if job is not None and job.submitted and not job.completed and not (
                             self.control_review and pipeline.cancelled):
                         self.failure_reason = self.failure_reason or 'peer_eof_with_unfinished_job'
                         self.log('pipeline_job_incomplete_at_eof', submitted=job.submitted,
                                  expected=job.job_length, endpoint_unknown=True, no_replay=True)
-                    self.log('controlled_cancel_responses_drained' if self.control_review and
+                    self.log('controlled_cancel_responses_drained' if self.controls_enabled and
                              pipeline.cancelled else 'pipeline_eof_responses_drained', no_replay=True)
                 except Exception as error:
                     # A subsequent route-close error must not hide the original
@@ -247,15 +297,15 @@ class PipelineTCPBridge:
                         staged_bytes=job.staged_bytes if job else 0,
                         job_submitted=job.submitted if job else 0,
                         job_completed=job.completed if job else False,
-                        control_phase=pipeline.phase if self.control_review and pipeline else None,
-                        unsent_urgent_hex=pipeline.urgent.hex() if self.control_review and
+                        control_phase=pipeline.phase if self.controls_enabled and pipeline else None,
+                        unsent_urgent_hex=pipeline.urgent.hex() if self.controls_enabled and
                             pipeline and pipeline.urgent else None,
-                        discarded_source_bytes=parser.discarded_bytes if self.control_review else 0,
+                        discarded_source_bytes=parser.discarded_bytes if self.controls_enabled else 0,
                         endpoint_unknown=bool(job and job.submitted and not job.completed),
-                        control_position_trusted=False if self.control_review and pipeline and
+                        control_position_trusted=False if self.controls_enabled and pipeline and
                             pipeline.cancelling else None,
                         no_replay=True)
-                    if self.control_review and pipeline is not None:
+                    if self.controls_enabled and pipeline is not None:
                         if job is not None and not job.aborted:
                             job.cancel()
                         self.log('pipeline_parser_discarded', pending_hex=parser.pending.hex(),
@@ -333,6 +383,10 @@ class _KnownTarget(str):
 
 async def run(args, log):
     from bleak import BleakScanner
+    owner_pid = getattr(args, 'owner_pid', None)
+    if owner_pid is not None and os.getppid() != owner_pid:
+        raise RuntimeError('Bridge owner is no longer the parent process')
+    timeout = args.seconds or None
     known = getattr(args, 'device', None) or os.environ.get('NEJE_DEVICE')
     if known:
         # BleakScanner.discover(timeout=8) costs eight seconds on EVERY start, which is
@@ -353,7 +407,7 @@ async def run(args, log):
         # accepted trade-offs are recorded in docs/transparent-bridge-plan.md.
         log('pipeline_transparent_mode', usb_equivalent=True, reviewed_job_required=False,
             whitelist=False, plan='docs/transparent-bridge-plan.md', authorization_required=True)
-        bridge = PipelineTCPBridge(targets[0], log, args.seconds, transparent=True)
+        bridge = PipelineTCPBridge(targets[0], log, timeout, transparent=True)
     elif file_review is not None:
         log('pipeline_file_review', source_sha256=file_review.sha256,
             review=file_review.summary(), execution_requested=True,
@@ -370,14 +424,25 @@ async def run(args, log):
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT): loop.add_signal_handler(sig, stop.set)
+    if getattr(args, 'transparent', False) and hasattr(signal, 'SIGUSR1'):
+        loop.add_signal_handler(signal.SIGUSR1, bridge.request_stop)
+    if owner_pid is not None and os.getppid() != owner_pid:
+        raise RuntimeError('Bridge owner exited during discovery')
     server = await asyncio.start_server(bridge.handle, '127.0.0.1', 4002)
     log('pipeline_listening', bind='127.0.0.1:4002',
         profile=bridge.profile,
         reviewed_job_controls=controls,
         control_capture_without_forwarding=capture)
     waits = [asyncio.create_task(stop.wait()), asyncio.create_task(bridge.finished.wait())]
+    async def watch_owner():
+        while os.getppid() == owner_pid:
+            await asyncio.sleep(.2)
+        log('pipeline_owner_exited', owner_pid=owner_pid, remote_stop_confirmed=False)
+        stop.set()
+    if owner_pid is not None:
+        waits.append(asyncio.create_task(watch_owner()))
     try:
-        done, _ = await asyncio.wait(waits, timeout=args.seconds, return_when=asyncio.FIRST_COMPLETED)
+        done, _ = await asyncio.wait(waits, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
         if not done:
             # Wall-clock limit, not a fault. Record it explicitly so the managed
             # layer can tell an expired session apart from a failed one instead of
@@ -442,9 +507,13 @@ def parse_args(argv=None):
                         help='Requires separate onsite control/motion authorization; reads $N, forwards !/~ and one reset')
     parser.add_argument('--laser-power-isolated', action='store_true')
     parser.add_argument('--seconds', type=int,
-                        help='Wall session limit, including holds; default derived for reviewed files')
+                        help='Wall session limit, including holds; 0 only for an owned GUI session')
+    parser.add_argument('--owner-pid', type=int,
+                        help='GUI-owned transparent session; close when this parent exits')
     parser.add_argument('--log', type=Path)
     args = parser.parse_args(argv)
+    if args.owner_pid is not None and (args.owner_pid <= 1 or not args.transparent):
+        parser.error('--owner-pid requires a valid parent PID and transparent mode')
     if args.job_file and (args.allow_reviewed_ten_mm_job or args.capture_controls_without_forwarding):
         parser.error('Reviewed file is exclusive with fixed-job/control-capture profiles')
     if (args.allow_reviewed_file or args.expected_job_sha256 or args.allow_reviewed_xy_file or args.allow_reviewed_arc_file or args.allow_reviewed_rapid_file
@@ -513,8 +582,11 @@ def parse_args(argv=None):
         if not args.file_review and (args.power_ceiling is not None or args.feed_ceiling is not None):
             parser.error('Declared power/feed ceilings only apply to a reviewed file')
         if args.transparent:
-            if not 1<=args.seconds<=MAX_ACTIVE_SECONDS:
-                parser.error(f'transparent mode: seconds must be 1..{MAX_ACTIVE_SECONDS}')
+            if args.seconds == 0 and args.owner_pid is None:
+                parser.error('Unlimited GUI session requires --owner-pid')
+            if args.seconds != 0 and not 1<=args.seconds<=MAX_ACTIVE_SECONDS:
+                parser.error(f'transparent mode: seconds must be 1..{MAX_ACTIVE_SECONDS}, '
+                             'or 0 with --owner-pid')
         elif not args.file_review and not 1<=args.seconds<=300:
             parser.error('seconds must be 1..300')
     return args

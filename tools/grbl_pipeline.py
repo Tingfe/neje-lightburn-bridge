@@ -50,8 +50,7 @@ class GrblPipeline:
         if not isinstance(wire, bytes) or not wire.endswith(b'\n'):
             raise ValueError('One complete byte line required')
         body = wire[:-1].removesuffix(b'\r')
-        if any(byte in b'?!~' or (byte != 9 and not 32 <= byte < 127) for byte in body):
-            raise ValueError('Line contains realtime/control/non-ASCII bytes')
+        self._validate_body(body)
         if len(wire) > self.rx_budget:
             raise ValueError('Line exceeds explicit receive budget')
         if self.queued_bytes + len(wire) > self.queue_limit:
@@ -59,7 +58,12 @@ class GrblPipeline:
         self.sequence += 1
         self.queued.append(Line(self.sequence, wire))
         self.queued_bytes += len(wire)
+        self.log('pipeline_line_enqueued', sequence=self.sequence, hex=wire.hex())
         return self.sequence
+
+    def _validate_body(self, body):
+        if any(byte in b'?!~' or (byte != 9 and not 32 <= byte < 127) for byte in body):
+            raise ValueError('Line contains realtime/control/non-ASCII bytes')
 
     def realtime(self, wire):
         self.require_live()

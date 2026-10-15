@@ -82,21 +82,9 @@ class SelfAuditTests(unittest.TestCase):
         from neje import audit_after
         import io
         import contextlib
-        rows = [
-            dict(event='pipeline_tcp_connected'),
-            dict(event='pipeline_transparent_mode', usb_equivalent=True,
-                 reviewed_job_required=False, whitelist=False),
-            dict(event='pipeline_tcp_received', hex=b'?\n'.hex()),
-            dict(event='pipeline_ingress', kind='status', hex=b'?'.hex()),
-            dict(event='pipeline_ingress', kind='ordinary', hex=b'\n'.hex()),
-            dict(event='pipeline_write_attempt', hex=b'?\n'.hex()),
-            dict(event='stream_write_reserved', hex=b'?\n'.hex(), before=0, after=2),
-            dict(event='stream_rx_staged', hex=b'ok\n'.hex()),
-            dict(event='pipeline_tcp_delivered', hex=b'ok\n'.hex()),
-            dict(event='pipeline_transmission_stopped', queued_bytes=0, staged_bytes=0,
-                 no_replay=True),
-            dict(event='cleanup_verified', way=0, final_app=3),
-        ]
+        import asyncio
+        from transparent_fixture import faithful_rows
+        rows = asyncio.run(faithful_rows())
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = audit_after(self.write(rows))
@@ -140,6 +128,9 @@ class RepeatLaunchTests(unittest.TestCase):
         server.listen(1)
         try:
             self.assertTrue(port_in_use(port))
+            server.settimeout(0.1)
+            # The occupancy check must never consume a business connection.
+            with self.assertRaises(TimeoutError): server.accept()
         finally:
             server.close()
         self.assertFalse(port_in_use(port))
@@ -165,6 +156,28 @@ class RepeatLaunchTests(unittest.TestCase):
             self.assertIn('已有桥接在运行', out.getvalue())
         finally:
             neje.port_in_use = original
+
+
+class PackagedModeCheckTests(unittest.TestCase):
+    def test_mode_read_uses_system_query_without_false_isolation_or_serial_script(self):
+        import tempfile
+        import neje
+        from unittest.mock import patch
+        for frozen in (False, True):
+            with self.subTest(frozen=frozen), tempfile.TemporaryDirectory() as folder:
+                path = Path(folder)/'mode.jsonl'
+                path.write_text('{"kind":"system_info","current_app":3}\n')
+                with patch.object(neje, 'FROZEN', frozen), patch.object(neje.subprocess, 'run') as run:
+                    run.return_value.returncode = 0
+                    app, _ = neje.probe_device_mode(log_path=path)
+                self.assertEqual(app, 3)
+                command = run.call_args.args[0]
+                self.assertIn('--query', command)
+                self.assertNotIn('--laser-power-isolated', command)
+                self.assertNotIn('--grbl-status', command)
+                if frozen:
+                    self.assertIn(neje.INTERNAL_MODE_CHECK, command)
+                    self.assertNotIn(str(neje.ROOT/'tools/p0_probe.py'), command)
 
 if __name__ == '__main__':
     unittest.main()

@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from pipeline_tcp_bridge import PipelineTCPBridge
 from controlled_reviewed_job import require_empty_startup
 from reviewed_ten_mm import wire_lines
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 from test_ten_mm_runtime import Session
 
 

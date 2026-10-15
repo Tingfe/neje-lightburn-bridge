@@ -1,22 +1,9 @@
-"""One command to put the NEJE 5 Plus on Bluetooth for LightBurn.
+"""Start the native TCP/BLE bridge for LightBurn at 127.0.0.1:4002.
 
-    python tools/neje.py          full functionality - the laser is powered
-    python tools/neje.py --test   laser physically isolated (safe dry runs)
-
-This starts the transparent bridge with every setting already chosen: Bluetooth
-transport, reliable channel, a session long enough for a working day, and a timestamped
-log next to the repo. Nothing has to be configured and no flag has to be remembered.
-
-Then, in LightBurn, connect to the TCP device on 127.0.0.1:4002 and work normally:
-Start, jog-free positioning, homing, settings, any design. Press Ctrl-C here when done.
-
-Two things this program deliberately still refuses, because they were measured to be
-unsafe rather than assumed: jog commands ($J=) fail the session closed, and nothing the
-bridge sends is ever fabricated or replayed.
-
-The operator still owns the physical safety facts: eye protection, ventilation, a way
-to cut power, clear travel, and hands clear. Only the machine's own power switch can
-stop it once it is moving.
+GRBL lines, native jogs, settings and realtime controls pass to the device.
+Responses are never fabricated. Reset ends this generation; link loss/closing
+this program does not stop buffered motion. Use independent power cutoff if a
+software stop cannot be confirmed. --test describes physical isolation only.
 """
 import argparse
 import datetime
@@ -47,13 +34,14 @@ def data_root():
 LOG_ROOT = data_root()                     # 7 hours, the bridge's own ceiling
 SAFETY_LINES = (
     '护目镜 / 通风 / 灭火 / 可独立断电 / 行程净空 / 手离开',
-    '只有设备自身的电源能真正停下机器 —— 出事先断它的电',
-    '急停随时可用：python tools/emergency_stop.py --execute --log <新日志>',
+    '断连不会停止已缓冲动作；软件停止未确认时使用独立断电',
+    '已连接时用 LightBurn Stop 或 GUI 软件停止；复位后需恢复位置基准',
 )
 
 
 FROZEN = getattr(sys, 'frozen', False)
 INTERNAL_BRIDGE = '--internal-run-bridge'
+INTERNAL_MODE_CHECK = '--internal-mode-check'
 
 
 def build_command(seconds=DEFAULT_SECONDS, log=None, test=False, device=None):
@@ -88,14 +76,11 @@ def audit_after(log):
     from check_transparent_capture import audit
     try:
         result = audit(path)
-    except AssertionError as error:
+    except (AssertionError, ValueError, KeyError) as error:
         print(f'  ✗ 审计未通过: {error}')
         print(f'    捕获保留在 {path} —— 不要删，先查清楚')
         return 1
-    # A translated jog is longer than the jog itself, so the two byte counts are not
-    # meant to be equal; what is asserted is that the forwards are exactly what the
-    # documented policy makes of the client's bytes.
-    print('  ✓ 审计通过: 客户端 {} 字节 → 按策略转发 {} 字节（点动会被翻译成相对移动）、'
+    print('  ✓ 审计通过: 客户端 {} 字节 → 原生转发 {} 字节、'
           '设备 {} 字节、回传 {}、NEJE 写 {} 次、无伪造、无重放、干净收尾={}'.format(
               result['client_bytes_in'], result['client_bytes_forwarded'],
               result['device_bytes_staged'], result['bytes_delivered'],
@@ -104,15 +89,22 @@ def audit_after(log):
 
 
 def port_in_use(port=4002):
-    """True when a bridge is already serving that port.
+    """Check local address occupancy without connecting to the business socket.
 
-    Double-clicking the entry twice must not produce a raw bind traceback: the second
-    run simply tells the operator that the link is already up.
+    This says nothing about the listener's identity or health. A connect probe would
+    consume the bridge's single-use client and cause BLE initialization/cleanup.
     """
+    import errno
     import socket
     with socket.socket() as probe:
-        probe.settimeout(0.5)
-        return probe.connect_ex(('127.0.0.1', port)) == 0
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind(('127.0.0.1', port))
+        except OSError as error:
+            if error.errno == errno.EADDRINUSE:
+                return True
+            raise
+        return False
 
 
 def probe_device_mode(python=None, log_path=None):
@@ -123,11 +115,13 @@ def probe_device_mode(python=None, log_path=None):
     to be used when no session is up.
     """
     probe = ROOT / 'tools' / 'p0_probe.py'
-    log_path = log_path or ROOT / 'logs' / ('mode-check-' + datetime.datetime.now()
+    log_path = log_path or LOG_ROOT / ('mode-check-' + datetime.datetime.now()
                                             .strftime('%Y%m%dT%H%M%S') + '.jsonl')
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run([python or PYTHON, str(probe), '--query', '--grbl-status',
-                             '--laser-power-isolated', '--log', str(log_path)],
+    launcher = [sys.executable, INTERNAL_MODE_CHECK] if FROZEN else [python or PYTHON, str(probe)]
+    # Application information needs only the official system read. Do not claim
+    # laser isolation or open/query the GRBL reliable route to check the mode.
+    result = subprocess.run(launcher + ['--query', '--log', str(log_path)],
                             capture_output=True, text=True)
     if result.returncode != 0:
         return None, f'无法完成检查: {(result.stderr or result.stdout).strip()[:200]}'
@@ -153,8 +147,8 @@ def main():
     parser.add_argument('--valid-for', type=float, default=DEFAULT_SECONDS / 3600,
                         metavar='HOURS',
                         help='How long the bridge stays available (default: 7 hours). Within '
-                             'this window LightBurn may disconnect and reconnect freely; each '
-                             'connection still gets a brand new session')
+                             'this window bounds one client session; restart explicitly after '
+                             'disconnect or reset')
     parser.add_argument('--check', action='store_true',
                         help='Check the device mode over BLE and exit (use when no session '
                              'is running: it contends for the radio otherwise)')
@@ -212,7 +206,15 @@ def _run_bridge_in_process():
     return pipeline_tcp_bridge.main()
 
 
+def _run_mode_check_in_process():
+    import p0_probe
+    sys.argv = ['p0_probe.py', *sys.argv[2:]]
+    return p0_probe.main()
+
+
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == INTERNAL_BRIDGE:
         raise SystemExit(_run_bridge_in_process())
+    if len(sys.argv) > 1 and sys.argv[1] == INTERNAL_MODE_CHECK:
+        raise SystemExit(_run_mode_check_in_process())
     raise SystemExit(main())

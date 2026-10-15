@@ -26,7 +26,7 @@ import lightburn_session as manager
 from managed_recovery import ownership_proof,input_boundary
 from grbl_transport import encode_write
 from neje_protocol import GRBL_COMM_STATUS
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 from test_ten_mm_runtime import IDLE,SETTINGS,MODAL
 from managed_disconnect_host import observed_client
 from test_job_disconnect import Delegate

@@ -21,7 +21,9 @@ def audit(path, allowed=None, response_event='stream_query_result', completion_e
   elif e=='notify':decoded.extend(decoder.feed(bytes.fromhex(row['hex'])))
   elif e=='frame':
    packet=bytes.fromhex(row['hex']);frames.append(packet)
-   assert describe(packet)['kind']==row['kind']
+   description=describe(packet)
+   for key in ('kind','payload_hex','read_check','write_check','way','device_tx_error','device_rx_error'):
+    if key in description:assert row[key]==description[key], ('frame metadata differs from raw packet',key)
    if row['kind']=='grbl_data':
     assert packet[-1]==crc32_mpeg2(packet[1:-1]) & 255
     payload=bytes.fromhex(row['payload_hex']);r=accept_data(r,row['read_check'],payload)

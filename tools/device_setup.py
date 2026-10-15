@@ -6,12 +6,10 @@ answer:
   * `scan()` — list what is actually advertising nearby, so an operator with a device
     whose name is not exactly "NEJE 5 Plus" (or with two of them) can pick instead of
     hitting a bare "Expected exactly one NEJE 5 Plus".
-  * `lightburn_tcp_device()` — LightBurn talks to the bridge over a TCP device on
-    127.0.0.1:4002. That device is created once, by hand, in LightBurn's UI; this reads
-    LightBurn's own configuration to say whether it is already there, and
-    `add_instructions()` spells out the steps when it is not.
+  * `lightburn_tcp_device()` reads LightBurn's existing local TCP profile.
+  * `add_tcp_device()` adds a native GRBL/TCP profile without a template.
 
-Nothing here writes to LightBurn's configuration.
+Device creation writes only while LightBurn is closed, with backup and read-back.
 """
 import asyncio
 import datetime
@@ -29,7 +27,9 @@ BRIDGE_PORT = 4002
 
 async def _discover(seconds):
     from bleak import BleakScanner
-    return await BleakScanner.discover(timeout=seconds)
+    # Bleak's timeout covers advertising, after adapter initialization. Bound
+    # that initialization too, so absent/disabled Bluetooth cannot wait forever.
+    return await asyncio.wait_for(BleakScanner.discover(timeout=seconds), seconds + 8)
 
 
 def scan(seconds=6.0):
@@ -48,21 +48,11 @@ def _devices():
     if not PREFS.exists():
         return None
     text = PREFS.read_text(errors='replace')
-    start = text.find('[', text.find('"DeviceList"'))
-    if start < 0:
+    try:
+        start, end = _block_span(text)
+        return json.loads(text[start:end])
+    except ValueError:
         return []
-    depth = 0
-    for index in range(start, len(text)):
-        if text[index] == '[':
-            depth += 1
-        elif text[index] == ']':
-            depth -= 1
-            if depth == 0:
-                try:
-                    return json.loads(text[start:index + 1])
-                except ValueError:
-                    return []
-    return []
 
 
 def lightburn_tcp_device(port=BRIDGE_PORT):
@@ -78,16 +68,22 @@ def lightburn_tcp_device(port=BRIDGE_PORT):
     for device in devices:
         if str(device.get('Type', '')).upper() != 'TCP':
             continue
-        settings = device.get('Settings', {})
-        net = device.get('NetworkPort') or settings.get('NetworkPort')
-        if str(net) == str(port):
+        net = network_port(device)
+        if str(net) == str(port) and device.get('Info') in ('127.0.0.1', 'localhost'):
             names.append(device.get('DisplayName') or device.get('Name') or '?')
     return names
 
 
+def network_port(device):
+    """Current LightBurn stores the authoritative port inside Settings."""
+    return device.get('Settings', {}).get('NetworkPort') or device.get('NetworkPort')
+
+
 def lightburn_running():
-    return subprocess.run(['pgrep', '-x', 'LightBurn'],
-                          capture_output=True).returncode == 0
+    result = subprocess.run(['pgrep', '-x', 'LightBurn'], capture_output=True)
+    if result.returncode not in (0, 1):
+        raise RuntimeError('无法确认 LightBurn 已退出；未修改配置')
+    return result.returncode == 0
 
 
 def quit_lightburn(wait=25):
@@ -108,43 +104,28 @@ def quit_lightburn(wait=25):
 
 
 def _block_span(text):
-    start = text.find('[', text.find('"DeviceList"'))
-    depth = 0
-    for index in range(start, len(text)):
-        if text[index] == '[':
-            depth += 1
-        elif text[index] == ']':
-            depth -= 1
-            if depth == 0:
-                return start, index + 1
-    raise ValueError('DeviceList not found')
+    key = re.search(r'"DeviceList"\s*:\s*', text)
+    if key is None: raise ValueError('DeviceList not found')
+    start = key.end()
+    value, length = json.JSONDecoder().raw_decode(text[start:])
+    if not isinstance(value, list): raise ValueError('DeviceList must be an array')
+    return start, start + length
 
 
 def build_device(devices, port=BRIDGE_PORT, name='LaserLink NEJE5 (蓝牙桥接)'):
-    """Synthesise a TCP device from the best template LightBurn already has.
-
-    A TCP entry that works is the ideal template; otherwise the first GRBL device is
-    converted. The GRBL profile is kept, since that is what the machine speaks.
-    """
-    template = next((d for d in devices
-                     if str(d.get('Type', '')).upper() == 'TCP'
-                     and str(d.get('NetworkPort') or d.get('Settings', {}).get('NetworkPort')) == str(port)),
-                    None)
-    if template is None:
-        template = next((d for d in devices if str(d.get('Name', '')).upper() == 'GRBL'), None)
-    if template is None:
-        template = next((d for d in devices if d.get('Type')), None)
-    if template is None:
-        raise ValueError('LightBurn has no device to use as a template')
-    device = json.loads(json.dumps(template))
-    device['DisplayName'] = name
-    device['Type'] = 'TCP'
-    device['Info'] = '127.0.0.1'
-    device['NetworkPort'] = port
-    device.pop('CommPort', None)
-    device['GUID'] = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')[:12]
-    device['HomeOnStartup'] = False
-    return device
+    """Create a self-contained native GRBL profile; do not inherit another machine."""
+    return dict(DisplayName=name, Name='GRBL', ProfilePath='GRBL', Type='TCP',
+        Info='127.0.0.1', NetworkPort=port,
+        GUID=datetime.datetime.now().strftime('%Y%m%d%H%M%S%f'),
+        Width=260, Height=400, HomeOnStartup=False,
+        MirrorX=False, MirrorY=False, JogContinuous=False,
+        EnableLaser2Offset=False, EnableProcessOffset=False,
+        DefaultCutList=[], DefaultToolCutList=[], Macros=[], Checklist='',
+        Settings=dict(NetworkPort=port, S_Scale=1000, Units=1, CutOrigin=2,
+            TransferMode=0, AllowSettingsFetch=True, EnableGrblJCommand=True,
+            EnableDTR=False, EnableZ=False, EnableU=False,
+            StartGCode='', EndGCode='', LaserFire_Enable=False, LaserFire_Power=0,
+            LaserFrame_Enable=False, GCodeClustering=False, EnableBoundsCheck=True))
 
 
 def add_tcp_device(apply=False, port=BRIDGE_PORT):
@@ -153,18 +134,26 @@ def add_tcp_device(apply=False, port=BRIDGE_PORT):
     if devices is None:
         return False, f'找不到 LightBurn 配置：{PREFS}'
     for device in devices:
-        net = device.get('NetworkPort') or device.get('Settings', {}).get('NetworkPort')
-        if str(device.get('Type', '')).upper() == 'TCP' and str(net) == str(port):
+        net = network_port(device)
+        if (str(device.get('Type', '')).upper() == 'TCP' and str(net) == str(port)
+                and device.get('Info') in ('127.0.0.1', 'localhost')):
             return False, f'已存在指向 127.0.0.1:{port} 的设备：{device.get("DisplayName")}'
     device = build_device(devices, port=port)
     if not apply:
         return True, ('干跑：将新增设备 ' + json.dumps({k: device[k] for k in
                       ('DisplayName', 'Type', 'Info', 'NetworkPort', 'Name', 'ProfilePath')},
                       ensure_ascii=False))
-    if lightburn_running():
+    try:
+        running = lightburn_running()
+    except RuntimeError as error:
+        return False, str(error)
+    if running:
         return False, 'LightBurn 正在运行：它会用内存里的设备表覆盖配置，请先关闭'
     text = PREFS.read_text(errors='replace')
-    start, end = _block_span(text)
+    try:
+        start, end = _block_span(text)
+    except ValueError as error:
+        return False, f'配置格式无法读取，未修改：{error}'
     devices.append(device)
     backup = PREFS.with_name(f'prefs.ini.neje-backup-{datetime.datetime.now():%Y%m%dT%H%M%S}')
     shutil.copy2(PREFS, backup)
@@ -179,8 +168,9 @@ def add_tcp_device(apply=False, port=BRIDGE_PORT):
 def add_instructions(port=BRIDGE_PORT):
     return (
         'LightBurn 里还没有指向本程序的设备，添加一次即可：\n'
-        '  1. LightBurn → 设备（Devices）→ 添加新设备 / 查找我的激光\n'
-        '  2. 设备类型选 GRBL（若列表里没有，选「其他」/Custom GCode）\n'
+        '  1. 优先保存并退出 LightBurn，点本程序「创建 LightBurn 设备」\n'
+        '     也可在 LightBurn → 设备（Devices）→ 创建手动设备\n'
+        '  2. 设备类型选原生 GRBL\n'
         f'  3. 连接方式选 TCP/以太网，地址 127.0.0.1，端口 {port}\n'
         '  4. 保存后连接该设备\n'
         '（只需做一次。之后本程序启动时它就能直接连上。）'
@@ -201,7 +191,11 @@ def status_text():
         return (f'⚠️ 配置里还没有指向 127.0.0.1:{BRIDGE_PORT} 的设备 —— '
                 '点「创建 LightBurn 设备」或「添加步骤」', False)
     listed = '、'.join(names)
-    if lightburn_running():
+    try:
+        running = lightburn_running()
+    except RuntimeError:
+        return (f'配置文件里已有「{listed}」；请在 LightBurn 中选择该设备。运行状态无法确认。', True)
+    if running:
         return (f'LightBurn 正在运行；配置文件里有「{listed}」'
                 '（本次启动是否显示它，需要在 LightBurn 里看一眼）', True)
     return (f'配置文件里已有「{listed}」（尚未在 LightBurn 中确认：启动 LightBurn 看它是否出现在设备列表）',

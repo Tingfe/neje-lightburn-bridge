@@ -23,7 +23,7 @@ from reviewed_pipeline_job import ReviewedPipelineJob
 from reviewed_ten_mm import TEN_MM_JOB, wire_lines
 from reviewed_ten_mm import review
 from check_ten_mm_capture import audit
-from test_byte_stream import FakeClient
+from fake_ble import FakeClient
 
 IDLE = b'<Idle|MPos:0,400,0,0|Bf:100,1500|FS:0,0>\n'
 SETTINGS = b'$13=0\n$30=1000\n$32=1\n$130=260\n$131=400\nok\n'

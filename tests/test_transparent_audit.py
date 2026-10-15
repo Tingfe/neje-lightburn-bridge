@@ -1,3 +1,4 @@
+import copy
 import json
 import sys
 import tempfile
@@ -6,72 +7,73 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from check_transparent_capture import audit
+from transparent_fixture import faithful_rows
 
 
-def capture(rows):
-    handle = tempfile.NamedTemporaryFile('w', suffix='.jsonl', delete=False)
-    for row in rows:
-        handle.write(json.dumps(row) + '\n')
-    handle.close()
-    return handle.name
+class TransparentAuditTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.rows = await faithful_rows()
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
 
+    def check(self, rows):
+        path = Path(self.folder.name)/'capture.jsonl'
+        path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+        return audit(path)
 
-BASE = [
-    dict(event='pipeline_transparent_mode', usb_equivalent=True,
-         reviewed_job_required=False, whitelist=False),
-    dict(event='pipeline_tcp_received', hex=b'?\n'.hex()),
-    dict(event='pipeline_ingress', kind='status', hex=b'?'.hex()),
-    dict(event='pipeline_ingress', kind='ordinary', hex=b'\n'.hex()),
-    dict(event='pipeline_write_attempt', hex=b'?'.hex()),
-    dict(event='pipeline_write_attempt', hex=b'\n'.hex()),
-    dict(event='stream_write_reserved', hex=b'?\n'.hex(), before=10, after=12),
-    dict(event='stream_rx_staged', hex=b'<Idle|MPos:0,400,0,0>\nok\n'.hex(), read_check=5),
-    dict(event='pipeline_tcp_delivered', hex=b'ok\n'.hex()),
-    dict(event='pipeline_transmission_stopped', queued_bytes=0, staged_bytes=0, no_replay=True),
-    dict(event='cleanup_verified', way=0, final_app=3),
-    dict(event='pipeline_server_stopped', cleanup_unknown=False, failure_reason=None),
-]
-
-
-class TransparentAuditTests(unittest.TestCase):
-    def test_a_faithful_capture_passes(self):
-        result = audit(capture(BASE))
+    async def test_real_codec_loopback_capture_passes(self):
+        result = self.check(self.rows)
         self.assertTrue(result['passed'])
-        self.assertFalse(result['whitelist'])
         self.assertTrue(result['clean_shutdown'])
-        self.assertTrue(result['no_fabricated_bytes'])
+        self.assertGreater(result['raw_audit']['decoded_frames'], 0)
+        self.assertTrue(result['restart_safe'])
 
-    def test_a_dropped_client_byte_is_caught(self):
-        rows = [dict(r) for r in BASE]
-        rows[4] = dict(event='pipeline_write_attempt', hex=b'\n'.hex())   # '?' never forwarded
+    async def test_all_delivery_removed_is_rejected(self):
         with self.assertRaises(AssertionError):
-            audit(capture(rows))
+            self.check([row for row in self.rows if row['event'] != 'pipeline_tcp_delivered'])
 
-    def test_an_invented_ingress_byte_is_caught(self):
-        rows = [dict(r) for r in BASE]
-        rows[2] = dict(event='pipeline_ingress', kind='status', hex=b'$H\n'.hex())
+    async def test_locally_valid_but_discontinuous_write_counters_are_rejected(self):
+        rows = copy.deepcopy(self.rows)
+        for row in rows:
+            if row['event'] == 'stream_write_reserved':
+                row['before'] = (row['before']+100)&65535
+                row['after'] = (row['after']+100)&65535
+        with self.assertRaises(AssertionError): self.check(rows)
+
+    async def test_fabricated_reply_is_rejected(self):
+        rows = copy.deepcopy(self.rows)
+        next(row for row in rows if row['event'] == 'pipeline_tcp_delivered')['hex'] = b'ALARM:1\n'.hex()
+        with self.assertRaises(AssertionError): self.check(rows)
+
+    async def test_notify_bytes_cannot_be_replaced_by_trusted_frame_metadata(self):
+        rows = copy.deepcopy(self.rows)
+        row = next(row for row in rows if row['event'] == 'notify')
+        row['hex'] = row['hex'][:-2] + '00'
+        with self.assertRaises((AssertionError, ValueError)): self.check(rows)
+
+    async def test_staged_unconfirmed_bytes_do_not_prove_delivery(self):
         with self.assertRaises(AssertionError):
-            audit(capture(rows))
+            self.check([row for row in self.rows if row['event'] != 'stream_verified'])
 
-    def test_a_fabricated_delivered_byte_is_caught(self):
-        rows = [dict(r) for r in BASE]
-        rows[8] = dict(event='pipeline_tcp_delivered', hex=b'ALARM:1\n'.hex())
-        with self.assertRaises(AssertionError):
-            audit(capture(rows))
+    async def test_unknown_cleanup_and_failure_do_not_pass(self):
+        for key, value in (('cleanup_unknown', True), ('failure_reason', 'BLE loss')):
+            rows = copy.deepcopy(self.rows)
+            next(row for row in rows if row['event'] == 'pipeline_server_stopped')[key] = value
+            with self.assertRaises(AssertionError): self.check(rows)
 
-    def test_a_counter_that_does_not_advance_is_caught(self):
-        rows = [dict(r) for r in BASE]
-        rows[6] = dict(event='stream_write_reserved', hex=b'?\n'.hex(), before=10, after=99)
-        with self.assertRaises(AssertionError):
-            audit(capture(rows))
+    async def test_open_capture_is_pending_not_green(self):
+        rows = self.rows[:next(i for i, row in enumerate(self.rows) if row['event'] == 'pipeline_transmission_stopped')]
+        path = Path(self.folder.name)/'open.jsonl'
+        path.write_text(''.join(json.dumps(row)+'\n' for row in rows))
+        result = audit(path, in_progress=True)
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['shutdown_verified'])
 
-    def test_a_declared_reviewed_mode_is_not_accepted(self):
-        rows = [dict(r) for r in BASE]
-        rows[0] = dict(event='pipeline_transparent_mode', usb_equivalent=True,
-                       reviewed_job_required=True, whitelist=True)
-        with self.assertRaises(AssertionError):
-            audit(capture(rows))
+    async def test_forged_post_eof_idle_verdict_is_rejected(self):
+        rows = copy.deepcopy(self.rows)
+        probe = next(row for row in rows if row['event'] == 'pipeline_eof_idle_probe')
+        probe['status'] = '<Idle|MPos:0,400,0,0|FS:0,0>'
+        with self.assertRaises(AssertionError): self.check(rows)
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == '__main__': unittest.main()
