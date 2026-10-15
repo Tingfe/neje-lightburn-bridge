@@ -6,19 +6,20 @@
 
 ![连接方式](assets/architecture.png)
 
-## 三步就能用
+## 下载即用（推荐）
 
-1. **装依赖**（只需一次）
-   ```sh
-   pip3 install bleak
-   ```
-2. **启动**：双击 **`neje.command`** —— 或在终端跑
-   ```sh
-   python3 tools/neje.py
-   ```
-3. **LightBurn**：设备列表里选 `LaserLink NEJE5 (蓝牙桥接)` → 点**连接** → 照常用
+1. **下载** → [最新版 macOS 应用](https://github.com/Tingfe/neje-lightburn-bridge/releases/latest)
+   （`NEJE-Bridge-x.y.z-macOS-arm64.zip`，需要 **Apple Silicon** Mac）
+2. 解压，把 **NEJE Bridge.app** 拖进「应用程序」
+3. **第一次右键 → 打开**（未做 Apple 公证，双击会被 Gatekeeper 拦；之后即可正常双击）
 
-> 第一次在新电脑上用时，先确认 LightBurn 里那个设备的**网络端口是 4002**、地址是 `127.0.0.1`（见下方「连不上怎么办」）。
+然后：
+
+1. 打开 **NEJE Bridge**，点 **启动桥接**
+2. **LightBurn** 里选设备 `LaserLink NEJE5 (蓝牙桥接)` → 点**连接**
+3. 照常用：**Start 加工自己的设计、回零、点动、改设置**
+
+> 不用装 Python、不用敲任何命令。界面每个会话结束会**自动做一次独立审计**并显示结论。
 
 ## 能做什么
 
@@ -74,3 +75,15 @@
 ## 许可
 
 [MIT](LICENSE)。软件按「现状」提供；激光可致盲、可引燃，使用者自行承担全部风险（见 [免责声明](DISCLAIMER.md)）。
+
+## 从源码运行（开发者）
+
+```sh
+pip3 install bleak
+python3 tools/neje.py          # 完整功能
+python3 tools/neje.py --test   # 激光隔离的安全试跑
+python3 tools/neje.py --check  # 检查设备是否在 GRBL 模式
+```
+
+macOS 上也可双击 `neje.command`。自行打包：`sh packaging/build-macos.sh python dist/macos-app`
+（依赖锁定在 `packaging/requirements-macos.txt`）。
