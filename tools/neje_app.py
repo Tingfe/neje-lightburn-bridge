@@ -305,11 +305,22 @@ class App:
         if self.saved_device:
             self.supervisor.device = self.saved_device['address']
         root.title('NEJE Bridge')
-        root.geometry('720x300')
-        root.minsize(680, 300)
+        # Tighten: reuse the size the operator last chose, otherwise let the window take
+        # exactly the size its content asks for instead of a hand-picked box.
+        saved_window = desktop_settings.load_window()
+        if saved_window:
+            root.geometry(saved_window)
+        else:
+            root.update_idletasks()
+            root.geometry('')
+        # Small enough that the window can actually hug its content; the old
+        # 680x300 floor was what left a band of empty space on the right.
+        root.minsize(520, 240)
         root.protocol('WM_DELETE_WINDOW', self.on_close)
         if sys.platform == 'darwin': root.createcommand('::tk::mac::Quit', self.on_close)
         self._build()
+        self._fit_wraplength()
+        self.root.bind('<Configure>', self._fit_wraplength)
         threading.Thread(target=self._supervise, daemon=True).start()
         root.after(500, self._drain)
         root.after(1000, self._refresh)
@@ -392,13 +403,32 @@ class App:
                                 padding=(16, 4, 16, 6))
         self.footer.pack(fill='x')
 
+    def _fit_wraplength(self, _event=None):
+        """Let wrapping text use the whole width, so a wider window is not half empty."""
+        width = max(320, self.root.winfo_width() - 48)
+        stack = [self.root]
+        while stack:
+            widget = stack.pop()
+            stack.extend(widget.winfo_children())
+            try:
+                if 'wraplength' in widget.keys():
+                    widget.configure(wraplength=width)
+            except Exception:                                # noqa: BLE001
+                pass
+
+    def _remember_geometry(self, _event=None):
+        try:
+            desktop_settings.save_window(self.root.geometry())
+        except Exception:                                    # noqa: BLE001
+            pass
+
     def toggle_panels(self):
         self.advanced.pack_forget()
         self.logbox.pack_forget()
         if self.show_advanced.get(): self.advanced.pack(fill='x', before=self.footer)
         if self.show_logs.get(): self.logbox.pack(fill='both', expand=True, padx=16, before=self.footer)
         height = 300 + (88 if self.show_advanced.get() else 0) + (250 if self.show_logs.get() else 0)
-        self.root.geometry(f'720x{height}')
+        self.root.geometry(f'{self.root.winfo_width()}x{height}')
 
     def setup_text(self):
         names = device_setup.lightburn_tcp_device()
@@ -554,6 +584,7 @@ class App:
         self.supervisor.request_stop()
 
     def on_close(self):
+        self._remember_geometry()
         if self.closing: return
         self.closing = True
         self.supervisor.stop()
