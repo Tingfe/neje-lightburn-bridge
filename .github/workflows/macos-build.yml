@@ -1,0 +1,53 @@
+name: macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'tools/**'
+      - 'tests/**'
+      - 'packaging/**'
+      - 'assets/**'
+      - 'neje-gui.spec'
+      - '.github/workflows/macos-build.yml'
+  pull_request:
+    paths:
+      - 'tools/**'
+      - 'tests/**'
+      - 'packaging/**'
+      - 'assets/**'
+      - 'neje-gui.spec'
+      - '.github/workflows/macos-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: packaging/requirements-macos.txt
+      - name: Install pinned build dependencies
+        run: python -m pip install -r packaging/requirements-macos.txt
+      - name: Offline regression (no BLE device)
+        run: python -m unittest discover -s tests -v
+      - name: Build and verify self-contained app
+        run: sh packaging/build-macos.sh python dist/macos-app
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: NEJE-Bridge-macOS-arm64
+          path: |
+            dist/macos-app/*.zip
+            dist/macos-app/SHA256SUMS.txt
+            dist/macos-app/build-metadata.json
+            dist/macos-app/bundle-diagnostics.json
+          if-no-files-found: error
+          retention-days: 30
