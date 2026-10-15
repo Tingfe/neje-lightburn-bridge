@@ -1,7 +1,9 @@
 #!/bin/sh
 # Build the native windowed controller, including its BLE bridge and Tcl/Tk.
 # Usage: ./packaging/build-macos.sh [python] [output-directory]
-set -eu
+set -e
+ARCH="${NEJE_ARCH:-$(/usr/bin/uname -m)}"
+export NEJE_ARCH="$ARCH"u
 cd "$(dirname "$0")/.."
 BUILD_PYTHON="${1:-python3}"
 GUI_VERSION="$("$BUILD_PYTHON" -c 'import runpy; print(runpy.run_path("tools/app_version.py")["VERSION"])')"
@@ -13,6 +15,6 @@ PYINSTALLER_CONFIG_DIR="$(pwd)/$GUI_WORK/pyinstaller-cache" \
   --workpath "$GUI_WORK" neje-gui.spec
 GUI_APP="$GUI_DIST/NEJE Bridge.app"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$GUI_APP"
-/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$GUI_APP" "$GUI_DIST/NEJE-Bridge-$GUI_VERSION-macOS-arm64.zip"
+/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$GUI_APP" "$GUI_DIST/NEJE-Bridge-$GUI_VERSION-macOS-$ARCH.zip"
 "$BUILD_PYTHON" packaging/verify-macos.py "$GUI_DIST"
 /usr/bin/du -sh "$GUI_APP"

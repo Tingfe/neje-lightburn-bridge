@@ -22,7 +22,9 @@ def verify(folder):
                    check=True, timeout=30)
     row = json.loads(report.read_text())
     assert row['frozen'] and row['offline_only'] and not row['device_connected'], row
-    assert row['architecture'] == 'arm64', row
+    expected_arch = os.environ.get('NEJE_ARCH') or row['architecture']
+    assert row['architecture'] in ('arm64', 'x86_64', 'universal2'), row
+    assert row['architecture'] == expected_arch, (row, expected_arch)
     assert row['version'] == version['VERSION'] and row['build'] == version['BUILD'], row
     for key in ('executable', 'tcl_library', 'tkinter_module'):
         assert Path(row[key]).resolve().is_relative_to(app), (key, row[key])
@@ -38,7 +40,7 @@ def verify(folder):
                    check=True, timeout=30)
     # Internal bridge dispatch must parse without constructing a Tk window or BLE link.
     subprocess.run([str(binary), '--internal-run-bridge', '--help'], env=env, check=True, timeout=30)
-    archive = folder/f'NEJE-Bridge-{version["VERSION"]}-macOS-arm64.zip'
+    archive = folder/f'NEJE-Bridge-{version["VERSION"]}-macOS-{expected_arch}.zip'
     with zipfile.ZipFile(archive) as zipped:
         assert zipped.testzip() is None
         assert any(name.endswith('Contents/MacOS/NEJE Bridge') for name in zipped.namelist())
