@@ -32,15 +32,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
-      fail-fast: false
       matrix:
         include:
           - runner: macos-15
             arch: arm64
-          # macos-13 was retired from GitHub-hosted runners; the job sat queued for ever.
-          # macos-15-intel is the current Intel label.
-          - runner: macos-15-intel
-            arch: x86_64
+          # NOTE: an Intel leg is possible -- macos-15-intel is a working runner and was
+          # verified to start -- but packaging still hardcodes arm64 in three places
+          # (neje-gui.spec target_arch, the zip name, verify-macos.py's assertion), so the
+          # Intel build produced an arm64 binary and died with 'Bad CPU type in
+          # executable'. Thread the architecture through those three before re-adding it.
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-python@v7.0.0

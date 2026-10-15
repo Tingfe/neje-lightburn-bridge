@@ -38,7 +38,7 @@
 | 项 | 要求 |
 | --- | --- |
 | 激光机 | **NEJE 5 Plus**（模块 A40640，455nm 蓝光二极管） |
-| 电脑 | **Apple Silicon 与 Intel Mac 都有发布包**（分别构建、各自自检）；也可从源码运行 |
+| 电脑 | **Apple Silicon** Mac 有发布包；**Intel 请从源码运行**（打包脚本目前只构建 arm64） |
 | LightBurn | 支持 TCP/Ethernet 设备的版本（实测 2.0.05） |
 | 网络端口 | LightBurn 设备的默认端口是 **23**，必须改成 **4002** |
 
