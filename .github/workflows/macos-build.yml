@@ -37,7 +37,9 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
-          - runner: macos-13
+          # macos-13 was retired from GitHub-hosted runners; the job sat queued for ever.
+          # macos-15-intel is the current Intel label.
+          - runner: macos-15-intel
             arch: x86_64
     steps:
       - uses: actions/checkout@v7.0.1
