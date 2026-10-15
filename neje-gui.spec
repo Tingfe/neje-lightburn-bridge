@@ -17,7 +17,7 @@ exe = EXE(
     pyz, analysis.scripts, [], exclude_binaries=True,
     name='NEJE Bridge', console=False, argv_emulation=False,
     bootloader_ignore_signals=False, strip=False, upx=False,
-    target_arch=os.environ.get('NEJE_ARCH') or None, codesign_identity=identity, entitlements_file=None,
+    target_arch='arm64', codesign_identity=identity, entitlements_file=None,
 )
 collection = COLLECT(exe, analysis.binaries, analysis.datas,
                      strip=False, upx=False, name='NEJE Bridge')

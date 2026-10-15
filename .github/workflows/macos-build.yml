@@ -53,8 +53,6 @@ jobs:
       - name: Offline regression (no BLE device)
         run: python -m unittest discover -s tests -v
       - name: Build and verify self-contained app
-        env:
-          NEJE_ARCH: ${{ matrix.arch }}
         run: sh packaging/build-macos.sh python dist/macos-app
       - uses: actions/upload-artifact@v7.0.2
         with:
