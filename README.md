@@ -47,15 +47,8 @@
 - **审计**：每个会话结束自动显示结论
 - 运行记录同时写到 `~/Library/Logs/NEJE/app.log`
 
-> 想放一张界面截图在这里？在 Mac 上按 **⌘⇧4** 再按 **空格**，点一下窗口即可截取，存成
-> `assets/screenshot-main.png`，然后在 README 里加一行图片引用即可。
->
-> ```markdown
-> ```
-> ![界面](assets/screenshot-main.png)
-> ```
-> ```
-
+> 想放一张界面截图？Mac 上按 **⌘⇧4** 再按**空格**，点一下窗口即可截取，
+> 存成 `assets/screenshot-main.png`，然后在 README 里引用它即可。
 ## 连不上怎么办
 
 | 现象 | 处理 |
