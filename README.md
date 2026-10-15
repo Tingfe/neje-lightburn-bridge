@@ -2,6 +2,8 @@
 
 # 用蓝牙在 LightBurn 里使用 NEJE 5 Plus
 
+[![tests](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/tests.yml/badge.svg)](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/tests.yml)
+
 不用 USB 线：**NEJE 5 Plus 通过蓝牙连到 LightBurn，功能和 USB 直连基本一样。**
 
 ![连接方式](assets/architecture.png)
@@ -30,6 +32,17 @@
 | ✅ **真实出光** | 实测：10% 功率 + **300 mm/min** 痕迹明显 |
 | ✅ 会话结束**自动审计** | 界面直接显示结论；篡改会被抓出 |
 | ✅ **一键急停不了时**：用 LightBurn 的 Stop + 切断设备电源 | 见「安全」 |
+
+## 兼容性 / 硬件要求
+
+| 项 | 要求 |
+| --- | --- |
+| 激光机 | **NEJE 5 Plus**（模块 A40640，455nm 蓝光二极管） |
+| 电脑 | **Apple Silicon（M 系列）** Mac —— 发布的包只构建了 arm64；Intel 机器请从源码运行 |
+| LightBurn | 支持 TCP/Ethernet 设备的版本（实测 2.0.05） |
+| 网络端口 | LightBurn 设备的默认端口是 **23**，必须改成 **4002** |
+
+> 其它 NEJE 机型/模块**未验证** —— 协议层可能相同，但请自行判断风险。
 
 ## 安全（请先读这一段）
 
@@ -87,3 +100,7 @@ python3 tools/neje.py --check  # 检查设备是否在 GRBL 模式
 
 macOS 上也可双击 `neje.command`。自行打包：`sh packaging/build-macos.sh python dist/macos-app`
 （依赖锁定在 `packaging/requirements-macos.txt`）。
+
+## 参与贡献
+
+欢迎提交 issue 与 PR —— 请先读 [贡献指南](CONTRIBUTING.md)，其中写明了本项目的**证据分级**与**失败记录**约定。
