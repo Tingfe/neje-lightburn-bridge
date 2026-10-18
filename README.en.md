@@ -22,3 +22,5 @@ Disconnecting, quitting the app or losing Bluetooth does **not** stop motion alr
 The bridge does not fabricate GRBL success responses. Its protocol logs and machine commands are unchanged by the UI language choice. Existing LightBurn device names and earlier log entries remain as originally saved.
 
 For setup details and troubleshooting, see the [Chinese guide](docs/gui-mac-test-guide.md). Source builds and hardware acceptance are separate from the offline package checks; see the [project status](docs/overall-progress.md).
+
+If **Frame** traces the boundary only once, open **Device Settings → Basic Settings → General Options** and enable **Frame Continuously** for the selected GRBL device. LightBurn will then repeat the outline until you dismiss its stop dialog. The local bridge profile currently has this option off; see the [configuration check](docs/frame-continuously-20261018.md).
