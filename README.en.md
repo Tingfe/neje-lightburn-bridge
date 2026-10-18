@@ -1,26 +1,30 @@
-<img src="assets/NEJE Bridge.png" width="110" alt="NEJE Bridge">
+<img src="assets/NEJE Bridge.png" width="96" alt="NEJE Bridge">
 
-# NEJE 5 Plus in LightBurn over Bluetooth
+# NEJE Bridge
 
-**Language / 语言:** [English](README.en.md) · [简体中文](README.md)
+[简体中文](README.md) · English
 
-NEJE Bridge presents the NEJE 5 Plus Bluetooth connection to LightBurn as a local GRBL/TCP device at `127.0.0.1:4002`. The desktop app offers Chinese and English. Choose **English** in the top-right corner; the preference is remembered.
+Use a NEJE 5 Plus in LightBurn over Bluetooth. The Mac app exposes the machine as a local GRBL/TCP device at `127.0.0.1:4002`; LightBurn sends its normal jobs and controls through the bridge.
 
-## Getting started
+## Start
 
-1. Download the `NEJE-Bridge-macOS-arm64` artifact from the [macOS app workflow](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml), then install **NEJE Bridge.app** on an Apple Silicon Mac. The [latest formal release](https://github.com/Tingfe/neje-lightburn-bridge/releases/latest) is still 1.2.4; bilingual 1.3.0 has not been published as a Release. No Intel GUI package has been verified.
-2. Power on the NEJE 5 Plus in GRBL mode. Open the app and choose **Start bridge**. Confirm the on-screen safety conditions before full operation.
-3. If this is your first use, click **Create LightBurn device**. Save your LightBurn work and quit LightBurn before creating its profile; the app backs up the configuration. Otherwise click **Open LightBurn**.
-4. In LightBurn, choose the GRBL/TCP device for `127.0.0.1:4002`, then connect. A real controller response is needed to confirm the connection; a profile in the device list alone does not prove it.
+1. On an Apple Silicon Mac, download `NEJE-Bridge-macOS-arm64` from the [macOS build workflow](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml). Version 1.3.0 is available as a workflow artifact; the formal Release was still 1.2.4 at the last check on 2026-10-18. The app is not Apple-notarized, and an Intel GUI build has not been verified.
+2. Open **NEJE Bridge.app**, choose **English** if desired, and click **Start bridge**.
+3. For first-time setup, save your LightBurn work and quit LightBurn, then click **Create LightBurn device**. Later, choose the created device and connect normally.
+4. Confirm the selected LightBurn device is **GRBL / TCP**, address `127.0.0.1`, port `4002`. Start jobs from LightBurn as usual.
 
-The app keeps the bridge available after a clean LightBurn disconnect. It performs an independent session audit before preparing a new connection. A fault, uncertain cleanup or controller reset requires an explicit check and reconnect; it never replays a job or restores coordinates automatically.
+The bridge stays available after a clean LightBurn disconnect. It keeps real controller responses and session logs; it does not fabricate `ok` or replay an uncertain job.
 
-## Safety
+## Verified scope
 
-Disconnecting, quitting the app or losing Bluetooth does **not** stop motion already buffered by the controller. The **Stop machine (software)** button requests a stop through the current owned connection and reports whether the machine confirmed it. If stop is unconfirmed, cut machine power independently. Wear 455 nm eye protection, provide ventilation, keep a fire extinguisher and power cutoff within reach, clear the travel area, and keep hands away from the machine.
+The project has completed real LightBurn image and vector jobs through BLE, including a roughly 58-minute house cut. The user reports that everyday operation now feels comparable to USB. The current engineering estimate is **96%**, because the long job ended with unconfirmed BLE cleanup, and a controlled same-design USB/BLE finished-part comparison remains open. See [current status](docs/overall-progress.md) for the evidence and limits.
 
-The bridge does not fabricate GRBL success responses. Its protocol logs and machine commands are unchanged by the UI language choice. Existing LightBurn device names and earlier log entries remain as originally saved.
+## Safety and help
 
-For setup details and troubleshooting, see the [Chinese guide](docs/gui-mac-test-guide.md). Source builds and hardware acceptance are separate from the offline package checks; see the [project status](docs/overall-progress.md).
+LightBurn Stop and the app's software stop request a controller stop, but disconnecting or quitting the app does not stop motion already buffered by the machine. Keep an independent machine power cutoff available. A controller reset also invalidates the position reference; home or verify coordinates before restarting.
 
-If **Frame** traces the boundary only once, open **Device Settings → Basic Settings → General Options** and enable **Frame Continuously** for the selected GRBL device. LightBurn will then repeat the outline until you dismiss its stop dialog. The local bridge profile currently has this option off; see the [configuration check](docs/frame-continuously-20261018.md).
+- [Daily operation and troubleshooting](docs/daily-use-guide.md)
+- [How the bridge works](docs/architecture.md)
+- [Documentation and evidence index](docs/README.md)
+
+Source development: `python3 tools/neje.py` (requires the Python dependencies); local app build: `sh packaging/build-macos.sh python dist/macos-app`. [MIT license](LICENSE) · [Safety notice](DISCLAIMER.md).

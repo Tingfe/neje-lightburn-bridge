@@ -1,4 +1,4 @@
-> 这是项目的历史技术交接文档（原 README）。当前对外说明见 [项目 README](../README.md)。
+> **历史技术交接文档（原 README）**。正文中“当前”“100/100”和旧启动步骤均为记录形成时的口径，不是现行验收结论。请以[项目首页](../README.md)、[日常指南](daily-use-guide.md)和[当前状态](overall-progress.md)为准。
 > 文中提到的 `evidence/` 目录未随仓库发布。
 
 # LaserLink / NEJE 5 Plus

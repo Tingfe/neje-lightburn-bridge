@@ -1,5 +1,7 @@
 # 原生透明桥接当前方案
 
+> 2026-10-14 的设计记录。现行结构与能力边界请先看[工作原理](architecture.md)，当前验收看[状态页](overall-progress.md)。下文的“后续”按记录日期理解。
+
 2026-10-14。透明模式已由外部工具实现并完成真实 LightBurn 作业；本轮继续完善同一路径。用户再次明确核心目标是透明桥接，以完整使用 LightBurn 功能。[本轮结果](native-transparent-hardening-result.md)取代旧“未实施”口径。
 
 LightBurn 直接生成并发送作业，不要求导出、摘要或白名单。`PassthroughPolicy`只做换行和实时字节分流，保留原生 `$J`；`TransparentGrblPipeline`维护有限输入额度、真实终端归属与停止代际；NEJE可靠通道核验帧、CRC与计数。受审文件模式保持独立测试用途。
