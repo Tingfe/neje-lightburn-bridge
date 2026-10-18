@@ -1,0 +1,121 @@
+"""Operator-facing Chinese/English text for the desktop bridge.
+
+Protocol event names, audit JSON and LightBurn command bytes are deliberately
+outside this module. Missing English strings fail visibly in development tests.
+"""
+
+import locale
+import os
+
+
+EN = {
+    '护目镜（455nm）': '455 nm safety glasses',
+    '通风': 'ventilation',
+    '灭火设备在手边': 'fire extinguisher within reach',
+    '可随时切断设备主电源': 'independent main power cutoff',
+    '行程净空': 'clear travel area',
+    '手离开机器': 'hands clear of the machine',
+    '语言 / Language': 'Language / 语言',
+    '无法保存语言设置：{error}': 'Could not save language preference: {error}',
+    '蓝牙透明桥接 · 127.0.0.1:4002': 'Transparent Bluetooth bridge · 127.0.0.1:4002',
+    '桥接未启动': 'Bridge is off',
+    '桥接运行中': 'Bridge is running',
+    '桥接已关闭 · 请检查设备状态': 'Bridge stopped · check the machine',
+    '正在准备下次连接': 'Preparing the next connection',
+    '正常会话结束后重新连接': 'Reconnecting after a clean session',
+    '重新连接需显式点击；不会自动重放作业或恢复坐标': 'Reconnect manually; jobs and coordinates are never restored automatically',
+    '启动桥接': 'Start bridge',
+    '关闭桥接': 'Stop bridge',
+    '重新连接': 'Reconnect',
+    '打开 LightBurn': 'Open LightBurn',
+    '创建 LightBurn 设备': 'Create LightBurn device',
+    '软件停止设备': 'Stop machine (software)',
+    '设备与测试选项': 'Device and test options',
+    '运行记录': 'Activity log',
+    '运行记录与会话核验': 'Activity and session audit',
+    '（还没有会话）': '(No session yet)',
+    '（扫描后选择设备）': '(Scan to choose a device)',
+    '（没发现 NEJE）': '(No NEJE found)',
+    '重新扫描': 'Scan again',
+    '隔离试跑': 'Isolated test',
+    '完整功能': 'Full operation',
+    '连接说明': 'Connection help',
+    '打开日志文件夹': 'Open log folder',
+    '正在寻找 NEJE…': 'Looking for NEJE…',
+    '扫描未完成': 'Scan did not complete',
+    '未发现 NEJE': 'NEJE not found',
+    '请在选项中选择一台 NEJE': 'Choose one NEJE in Options',
+    '设备：{name}': 'Device: {name}',
+    '断开连接不会停止设备已缓冲的动作；软件停止未确认时请独立断电。': 'Disconnecting does not stop buffered motion. If software stop is unconfirmed, cut power independently.',
+    '首次使用：请先安装并打开一次 LightBurn，再点创建设备。': 'First use: install and open LightBurn once, then create the device here.',
+    '首次使用：保存并退出 LightBurn，再点「创建 LightBurn 设备」。': 'First use: save your work, quit LightBurn, then click “Create LightBurn device”.',
+    'LightBurn：请选择「{name}」，启动桥接后连接。': 'LightBurn: select “{name}”, start the bridge, then connect.',
+    '点「启动桥接」，再在 LightBurn 选择蓝牙桥接设备。': 'Click “Start bridge”, then select the BLE bridge device in LightBurn.',
+    '监督器出错（已继续）: {error}': 'Supervisor error (continuing): {error}',
+    '刷新出错（已继续）: {error}': 'Refresh error (continuing): {error}',
+    '正在扫描蓝牙设备（约 6 秒）…': 'Scanning Bluetooth devices (about 6 seconds)…',
+    '蓝牙初始化或扫描超时（14 秒）': 'Bluetooth initialization or scan timed out (14 seconds)',
+    '扫描失败：{error}。请检查系统蓝牙及本程序的蓝牙权限。': 'Scan failed: {error}. Check system Bluetooth and this app’s Bluetooth permission.',
+    '未发现 NEJE，请确认上电后重新扫描。': 'No NEJE found. Check power and scan again.',
+    '发现多台 NEJE，请展开「设备与测试选项」选择一台后启动。': 'Multiple NEJE devices found. Open “Device and test options” and choose one.',
+    '请先关闭当前桥接，再切换设备。': 'Stop the current bridge before switching devices.',
+    '本次已选用 {name}，但未能保存设备：{error}': 'Using {name} now, but could not save the choice: {error}',
+    '已选用 {name}；下次启动直接连接。': 'Selected {name}; the next launch will use this device.',
+    '请在「扫描设备」后，从下拉框里选一台': 'Scan, then choose a device from the list.',
+    '在 LightBurn 设备列表选择蓝牙桥接设备。Ready 需真实连接确认。': 'Select the BLE bridge device in LightBurn. “Ready” requires an actual connection.',
+    '先保存并退出 LightBurn': 'Save and quit LightBurn first',
+    '首次添加设备需要 LightBurn 关闭，避免它覆盖配置。\n请保存图形并退出 LightBurn，再点此按钮。仅需设置一次。': 'LightBurn must be closed while this device is added, or it may overwrite the configuration.\nSave your design and quit LightBurn, then click again. This is needed only once.',
+    '等待保存并退出 LightBurn 后创建设备。': 'Waiting for you to save and quit LightBurn before creating the device.',
+    '已打开 LightBurn，请在设备列表选择新增的蓝牙桥接设备。': 'LightBurn opened. Select the new BLE bridge device in its device list.',
+    '配置文件已有：{names}。请在LightBurn选择该设备，连接127.0.0.1:4002；Ready及真实设备回应才证明连接成功。': 'Device profile found: {names}. Select it in LightBurn and connect to 127.0.0.1:4002. “Ready” plus a real machine response confirms the connection.',
+    '确认激光供电已隔离': 'Confirm laser power is isolated',
+    '确认安全条件': 'Confirm safety conditions',
+    '请确认故障已处理、设备状态及坐标已检查。\n重新连接不会重放上次作业，也不会回零或恢复坐标。': 'Confirm that the fault is resolved and you have checked machine state and coordinates.\nReconnecting will not replay the job, home the machine, or restore coordinates.',
+    '隔离试跑仍原样转发 LightBurn 指令，不过滤功率或运动。\n请确认激光模组供电已物理隔离、行程净空且可独立断电。': 'An isolated test still forwards LightBurn commands unchanged; it does not filter power or motion.\nConfirm that laser power is physically isolated, travel is clear, and you can cut power independently.',
+    '完整功能模式会让激光按 LightBurn 的指令出光。\n\n请确认：\n  · {conditions}\n\n断连不会停止已缓冲动作；软件停止未确认时请独立断电。\n\n继续？': 'Full operation can fire the laser as directed by LightBurn.\n\nConfirm:\n  · {conditions}\n\nDisconnecting does not stop buffered motion. Cut power independently if software stop is unconfirmed.\n\nContinue?',
+    '正在关闭桥接并等待清理；这不表示设备已停止': 'Closing the bridge and waiting for cleanup; the machine may still be moving',
+    '第 {number} 个会话 · 模式：{mode}': 'Session {number} · Mode: {mode}',
+    '{icon} {text}\n日志：{path}': '{icon} {text}\nLog: {path}',
+    '已经在运行': 'Already running',
+    '启动桥接（{mode}）': 'Starting bridge ({mode})',
+    '127.0.0.1:4002 已被占用；请结束旧桥接或使用现有服务': '127.0.0.1:4002 is in use; close the old bridge or use the existing service',
+    '第 {number} 个会话 → {name}': 'Session {number} → {name}',
+    '已请求关闭桥接；这不表示设备已经停止': 'Bridge shutdown requested; this does not confirm machine stop',
+    '无法经当前链路请求停止：设备停止未确认，请使用独立断电': 'Cannot request stop over this link. Machine stop is unconfirmed; cut power independently',
+    '当前桥接尚未连接设备：停止未确认，请使用独立断电': 'Bridge is not connected to the machine. Stop is unconfirmed; cut power independently',
+    '停止请求失败：{error}；设备停止未确认': 'Stop request failed: {error}. Machine stop is unconfirmed',
+    '停止请求已提交到当前桥接，等待真实设备确认；复位后坐标不可信': 'Stop requested through this bridge; awaiting machine confirmation. Coordinates are untrusted after reset',
+    '桥接已在运行': 'Bridge is already running',
+    '已显式准备新会话；设备仍须通过真实预检': 'A new session was explicitly prepared; the machine still needs real preflight checks',
+    '有效时间已用完，桥接不再重启': 'Availability period ended; bridge will not restart',
+    '已收到复位后的真实 Idle/Alarm 状态；坐标仍不可信，需显式恢复': 'Real Idle/Alarm state received after reset; coordinates remain untrusted and require explicit recovery',
+    '桥接退出码 {code}；诊断日志：{path}': 'Bridge exit code {code}; diagnostic log: {path}',
+    '已收到复位后的真实 Idle/Alarm 状态；坐标不可信': 'Real Idle/Alarm state received after reset; coordinates are untrusted',
+    '本次停止未获设备确认，请使用独立断电': 'Machine did not confirm this stop; cut power independently',
+    '自动重连已禁止：需检查故障、清理和机器状态后显式恢复': 'Automatic reconnect disabled; check fault, cleanup and machine state before explicit recovery',
+    '上次会话发生过复位；连接可重新建立，但坐标需由操作者确认或回零': 'The prior session reset the controller; reconnect is possible, but the operator must verify coordinates or home',
+    'LightBurn 已断开；桥接继续待命，准备下一个连接': 'LightBurn disconnected; bridge remains available for the next connection',
+    '审计未通过：{error}': 'Audit failed: {error}',
+    '审计无法进行：{error}': 'Audit unavailable: {error}',
+    '会话或清理尚未完整核验': 'Session or cleanup has not been fully verified',
+    '通过 · 客户端 {client_bytes} 字节、设备 {device_bytes} 字节、无伪造、无重放、干净收尾={clean}': 'Passed · client {client_bytes} bytes, machine {device_bytes} bytes, no fabricated responses, no replay, clean shutdown={clean}',
+    '找不到 LightBurn 配置：{path}': 'LightBurn configuration not found: {path}',
+    '已存在指向 127.0.0.1:{port} 的设备：{name}': 'A device for 127.0.0.1:{port} already exists: {name}',
+    '干跑：将新增设备 ': 'Preview: would add device ',
+    '无法确认 LightBurn 已退出；未修改配置': 'Could not confirm LightBurn has quit; configuration was not changed',
+    'LightBurn 正在运行：它会用内存里的设备表覆盖配置，请先关闭': 'LightBurn is running and may overwrite the device list from memory; quit it first',
+    '配置格式无法读取，未修改：{error}': 'Could not read configuration format; no changes made: {error}',
+    '写入后校验失败，已回滚（备份仍在 {backup}）': 'Post-write verification failed; rolled back (backup remains at {backup})',
+    '已新增设备「{name}」（备份 {backup}）': 'Added device “{name}” (backup {backup})',
+}
+
+
+def preferred_language():
+    """Use the OS locale on first launch; a saved UI choice takes precedence."""
+    value = (locale.getlocale()[0] or os.environ.get('LANG') or '').lower()
+    return 'zh' if value.startswith('zh') else 'en'
+
+
+def translate(message, language='zh', **values):
+    text = EN.get(message, message) if language == 'en' else message
+    return text.format(**values) if values else text

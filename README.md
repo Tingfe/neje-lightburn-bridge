@@ -2,6 +2,8 @@
 
 # 用蓝牙在 LightBurn 里使用 NEJE 5 Plus
 
+**语言 / Language:** [简体中文](README.md) · [English](README.en.md)
+
 [![tests](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/tests.yml/badge.svg)](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/tests.yml)
 
 不用 USB 线：**NEJE 5 Plus 通过蓝牙连到 LightBurn，功能和 USB 直连基本一样。**
@@ -10,14 +12,14 @@
 
 ## 下载即用（推荐）
 
-1. **下载** → [最新版 macOS 应用](https://github.com/Tingfe/neje-lightburn-bridge/releases/latest)
-   —— 选与你机器匹配的包：`…-macOS-arm64.zip`（Apple Silicon）或 `…-macOS-x86_64.zip`（Intel）
+1. **下载** → [macOS 自动构建产物](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml)中的 `NEJE-Bridge-macOS-arm64`（Apple Silicon）；[正式发布页](https://github.com/Tingfe/neje-lightburn-bridge/releases/latest)目前仍是 1.2.4，双语 1.3.0 尚未发布为 Release。Intel 图形包暂未验证
 2. 解压，把 **NEJE Bridge.app** 拖进「应用程序」
 3. **第一次右键 → 打开**（未做 Apple 公证，双击会被 Gatekeeper 拦；之后即可正常双击）
 
 然后：
 
 1. 打开 **NEJE Bridge**，点 **启动桥接**
+   —— 右上角可切换 **中文 / English**，选择会保存，下次启动沿用
 2. **LightBurn** 里选设备 `LaserLink NEJE5 (蓝牙桥接)` → 点**连接**
 3. 照常用：**Start 加工自己的设计、回零、点动、改设置**
 
@@ -38,7 +40,7 @@
 | 项 | 要求 |
 | --- | --- |
 | 激光机 | **NEJE 5 Plus**（模块 A40640，455nm 蓝光二极管） |
-| 电脑 | **Apple Silicon** Mac 有发布包；**Intel 请从源码运行**（打包脚本目前只构建 arm64） |
+| 电脑 | 当前打包脚本只构建 **Apple Silicon / arm64**；Intel 暂无经过验证的图形安装包 |
 | LightBurn | 支持 TCP/Ethernet 设备的版本（实测 2.0.05） |
 | 网络端口 | LightBurn 设备的默认端口是 **23**，必须改成 **4002** |
 
@@ -57,9 +59,11 @@
 
 启动后是一个小窗口，不用记命令和地址：
 
-- **状态**：桥接是否在跑、第几个会话、剩余有效时间
+- **状态**：桥接是否在跑、第几个会话
 - **按钮**：启动桥接 · 打开 LightBurn · 软件停止设备
-- **设备**：扫描 → 下拉选择 → 「使用选中的设备」
+- **语言**：右上角选择中文或 English；状态、确认窗口和新产生的运行提示随之切换，历史日志不重写
+- **双语版本核验**：[1.3.0 本机包与验证范围](docs/bilingual-gui-20261018.md)
+- **设备**：扫描 → 在下拉框选择设备；选择会立即保存
 - **审计**：每个会话结束自动显示结论
 - 运行记录同时写到 `~/Library/Logs/NEJE/app.log`
 
@@ -68,9 +72,12 @@
 | 现象 | 处理 |
 | --- | --- |
 | LightBurn 连不上 | 确认桥接**正在运行**（窗口显示"桥接运行中"）；确认设备是 **Ethernet/TCP、127.0.0.1、端口 4002**（LightBurn 的默认端口是 23，必须改） |
+| USB 和蓝牙都连不上，或提示 `Your device is not at GRBL mode` | 先停止当前作业、关闭 LightBurn 与桥接，确认设备没有运动；将设备电源和设备端 USB **都断开至少 10 秒**，再先接电源、后接 USB。USB 线可能继续给控制板供电，单关设备电源未必完成重启。重启后先检查模式/连接，再恢复位置基准；不要连续点击 Start 或 Home。见 [2026-10-18 实例](docs/connection-recovery-20261018.md) |
 | 改了端口还是不行 | 在 LightBurn 里**右键激光面板的设备按钮 → 重连** |
 | 想换一台设备 | 窗口点「扫描设备」，从下拉框选 |
 | 每次断开都要重开程序？ | 不用 —— 窗口会**自动**在会话之间准备好新连接（约 1～2 秒） |
+| 显示 Ready，但点 Start 没有动作 | 先别连续重试。打开 LightBurn「预览」：若画布空白且为 `0:00`，检查图片是否随工程保存；本机实测可重新导入原图并「另存为 → LightBurn 旧工程 (*.lbrn)」，重开确认预览非零。若预览有路径，再查桥接日志是否收到作业行。见[现场诊断与恢复副本](docs/image-job-no-start-20261015.md) |
+| Ready 旁百分比与机器动作不同步 | [LightBurn 官方说明](https://docs.lightburnsoftware.com/1.7/Reference/LaserWindow/)：百分比是已流送**命令**的比例，并非实际机械路径完成比例；要等真实设备 Idle、零功率和现场动作完成，不能只看百分比 |
 | 出光/停止异常 | 先用**隔离试跑**排查；停止用 LightBurn 的 Stop + **切断设备电源** |
 | 想排查设备模式 | `python3 tools/neje.py --check`（需先停止桥接） |
 

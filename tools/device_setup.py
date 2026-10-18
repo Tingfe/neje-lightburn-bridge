@@ -20,6 +20,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import neje_i18n
+
 PREFS = Path.home() / 'Library/Preferences/LightBurn/prefs.ini'
 NAME_HINT = 'NEJE'
 BRIDGE_PORT = 4002
@@ -128,32 +130,35 @@ def build_device(devices, port=BRIDGE_PORT, name='LaserLink NEJE5 (蓝牙桥接)
             LaserFrame_Enable=False, GCodeClustering=False, EnableBoundsCheck=True))
 
 
-def add_tcp_device(apply=False, port=BRIDGE_PORT):
+def add_tcp_device(apply=False, port=BRIDGE_PORT, language='zh'):
     """Add the bridge as a LightBurn device. Returns (changed, message)."""
+    t = lambda message, **values: neje_i18n.translate(message, language, **values)
     devices = _devices()
     if devices is None:
-        return False, f'找不到 LightBurn 配置：{PREFS}'
+        return False, t('找不到 LightBurn 配置：{path}', path=PREFS)
     for device in devices:
         net = network_port(device)
         if (str(device.get('Type', '')).upper() == 'TCP' and str(net) == str(port)
                 and device.get('Info') in ('127.0.0.1', 'localhost')):
-            return False, f'已存在指向 127.0.0.1:{port} 的设备：{device.get("DisplayName")}'
-    device = build_device(devices, port=port)
+            return False, t('已存在指向 127.0.0.1:{port} 的设备：{name}',
+                            port=port, name=device.get('DisplayName'))
+    name = 'LaserLink NEJE5 (BLE Bridge)' if language == 'en' else 'LaserLink NEJE5 (蓝牙桥接)'
+    device = build_device(devices, port=port, name=name)
     if not apply:
-        return True, ('干跑：将新增设备 ' + json.dumps({k: device[k] for k in
+        return True, (t('干跑：将新增设备 ') + json.dumps({k: device[k] for k in
                       ('DisplayName', 'Type', 'Info', 'NetworkPort', 'Name', 'ProfilePath')},
                       ensure_ascii=False))
     try:
         running = lightburn_running()
     except RuntimeError as error:
-        return False, str(error)
+        return False, t('无法确认 LightBurn 已退出；未修改配置')
     if running:
-        return False, 'LightBurn 正在运行：它会用内存里的设备表覆盖配置，请先关闭'
+        return False, t('LightBurn 正在运行：它会用内存里的设备表覆盖配置，请先关闭')
     text = PREFS.read_text(errors='replace')
     try:
         start, end = _block_span(text)
     except ValueError as error:
-        return False, f'配置格式无法读取，未修改：{error}'
+        return False, t('配置格式无法读取，未修改：{error}', error=error)
     devices.append(device)
     backup = PREFS.with_name(f'prefs.ini.neje-backup-{datetime.datetime.now():%Y%m%dT%H%M%S}')
     shutil.copy2(PREFS, backup)
@@ -161,11 +166,22 @@ def add_tcp_device(apply=False, port=BRIDGE_PORT):
     check = lightburn_tcp_device(port)
     if not check:
         shutil.copy2(backup, PREFS)
-        return False, f'写入后校验失败，已回滚（备份仍在 {backup}）'
-    return True, f'已新增设备「{device["DisplayName"]}」（备份 {backup.name}）'
+        return False, t('写入后校验失败，已回滚（备份仍在 {backup}）', backup=backup)
+    return True, t('已新增设备「{name}」（备份 {backup}）',
+                   name=device['DisplayName'], backup=backup.name)
 
 
-def add_instructions(port=BRIDGE_PORT):
+def add_instructions(port=BRIDGE_PORT, language='zh'):
+    if language == 'en':
+        return (
+            'Add a LightBurn device for this bridge once:\n'
+            '  1. Save your work and quit LightBurn, then click “Create LightBurn device” here.\n'
+            '     Or use LightBurn → Devices → Create Manually.\n'
+            '  2. Choose the native GRBL device type.\n'
+            f'  3. Choose TCP/Ethernet, address 127.0.0.1, port {port}.\n'
+            '  4. Save and connect to that device.\n'
+            '(This setup is needed only once.)'
+        )
     return (
         'LightBurn 里还没有指向本程序的设备，添加一次即可：\n'
         '  1. 优先保存并退出 LightBurn，点本程序「创建 LightBurn 设备」\n'

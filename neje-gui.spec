@@ -32,7 +32,7 @@ app = BUNDLE(
         'NSHighResolutionCapable': True,
         'LSUIElement': False,
         'LSMinimumSystemVersion': sysconfig.get_config_var('MACOSX_DEPLOYMENT_TARGET') or '27.0',
-        'NSBluetoothAlwaysUsageDescription': '扫描并通过蓝牙连接 NEJE，以便 LightBurn 使用透明桥接。',
-        'NSBluetoothPeripheralUsageDescription': '通过蓝牙连接 NEJE 激光设备。',
+        'NSBluetoothAlwaysUsageDescription': '扫描并通过蓝牙连接 NEJE，供 LightBurn 桥接使用。 Scan and connect to NEJE over Bluetooth for the LightBurn bridge.',
+        'NSBluetoothPeripheralUsageDescription': '通过蓝牙连接 NEJE 激光设备。 Connect to the NEJE laser device over Bluetooth.',
     },
 )
