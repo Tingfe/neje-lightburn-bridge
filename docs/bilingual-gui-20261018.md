@@ -9,3 +9,7 @@
 使用 Python 3.12.15、锁定依赖及项目打包脚本生成 `dist/NEJE-Bridge-1.3.0/NEJE Bridge.app` 和 ZIP，包内离线诊断、arm64 架构、版本、图标、签名验证、内置桥接帮助入口及 ZIP 完整性通过。通过电脑控制工具实际启动了打包 `.app`，看到中文主窗口、语言下拉框、三枚主要按钮和设备状态；取消了启动安全确认，没有开始桥接，随后退出程序。界面检查期间打开了 LightBurn，但未连接机器、提交作业或出光；退出后本机 4002 端口没有桥接监听。电脑控制工具未能可靠操作 Tk 下拉框，因此**英文界面的真实视觉切换尚未确认**，英文路径以自动化离线测试为证。构建元数据中的最低 macOS 版本为 27，反映当前宿主构建环境；该包未在更早系统验证，也未做 Developer ID 签名或 Apple 公证。新包实机 BLE/LightBurn 联调尚未执行；GitHub 云端构建需以[工作流结果](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml)单独核验，不能由本机打包推定通过。
 
 本机包：`dist/NEJE-Bridge-1.3.0/NEJE-Bridge-1.3.0-macOS-arm64.zip`。SHA-256 与其余详细信息见同目录 `build-metadata.json`、`SHA256SUMS.txt`。
+
+## GitHub 推送及云端构建
+
+双语源码与本记录已推送到 `main` 提交 [`75348a0`](https://github.com/Tingfe/neje-lightburn-bridge/commit/75348a047c5d2ec79ea769414e74d5e45dd77e47)。[测试工作流](https://github.com/Tingfe/neje-lightburn-bridge/actions/runs/39140119333)的 Python 3.12、3.13 两路均通过；[macOS 工作流](https://github.com/Tingfe/neje-lightburn-bridge/actions/runs/39140119334)的离线回归、arm64 打包、自检及上传均通过。云端产物名 `NEJE-Bridge-macOS-arm64`，GitHub API 读回大小 12,468,149 字节，尚未过期；工作流设置保留 30 天。下载时打开该次 macOS 工作流，在 **Artifacts** 中选择同名产物。云端包未做真机 BLE/LightBurn 验收，也未发布为正式 Release；正式发布页当前仍为 1.2.4。

@@ -12,6 +12,8 @@
 
 2026-10-18 中英双语入口：1.3.0/build8 新增中文/English 切换及保存，470 项离线回归通过，arm64 本机包完成离线验证并实际显示中文主窗口；英文窗口切换与真实 BLE/LightBurn 尚待验证。GitHub 云端打包应以[实际工作流](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml)单独核验。界面语言不改变透明传输可靠性和实物加工证据，整体仍估算 **94%**。见[双语版本记录](bilingual-gui-20261018.md)。
 
+2026-10-18 发布核验补记：源码提交 `75348a0` 已推送 `main`；[测试工作流](https://github.com/Tingfe/neje-lightburn-bridge/actions/runs/39140119333)的 Python 3.12/3.13 与[macOS arm64 打包工作流](https://github.com/Tingfe/neje-lightburn-bridge/actions/runs/39140119334)均成功，`NEJE-Bridge-macOS-arm64` 产物已上传。正式 Release 尚停留在 1.2.4，云端包也没有替代英文界面真实视觉切换或新包的 BLE/LightBurn 实机验收；整体估算仍为 **94%**。
+
 | 当前能力与验收 | 权重 | 当前估算 |
 | --- | ---: | ---: |
 | 原生BLE/TCP/LightBurn初始化 | 15 | 15 |
