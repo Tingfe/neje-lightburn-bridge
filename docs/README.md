@@ -6,6 +6,7 @@
 | --- | --- |
 | 日常操作与排障 | [使用指南](daily-use-guide.md) |
 | 当前进度、已验证范围、剩余问题 | [当前状态](overall-progress.md) |
+| 固件版本、升级风险与本机兼容范围 | [固件兼容性](firmware-compatibility.md) · [English](firmware-compatibility.en.md) |
 | 桥接结构和失联语义 | [工作原理](architecture.md) |
 | LightBurn 设备设置 | [透明桥接接入记录](transparent-lightburn-setup.md) |
 | 开发和复现实验 | [协议](protocol.md) → [可靠传输](grbl-reliable.md) → [实验索引](experiments.md) |
@@ -16,6 +17,7 @@
 | --- | --- |
 | 图片加工、无法开始及恢复 | [图片作业诊断](image-job-no-start-20261015.md) |
 | 小房子约 58 分钟实切 | [长时实切](house-cut-long-run-20261018.md) |
+| 2.4.0 升级后 BLE 失答与 2.3.2 回退验收 | [连接诊断](connection-init-race-20261019.md) · [固件回退验收](firmware-rollback-decision-20261019.md) |
 | 停止、失联与缓冲动作 | [运动停止](lightburn-motion-stop-hardware-result.md) · [作业断连](job-disconnect-result.md) |
 | 图形应用和双语包 | [本机打包](gui-mac-package-result.md) · [双语与云端构建](bilingual-gui-20261018.md) |
 | 气辅扩展 | [自动气辅方案](neje5-auto-air-assist-20261018.md)；尚未做实体阀验收 |

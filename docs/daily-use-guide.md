@@ -2,10 +2,12 @@
 
 适用范围：**NEJE 5 Plus / A40640、macOS 上的 NEJE Bridge、LightBurn 原生 GRBL/TCP 设备**。当前图形程序是透明桥接：不要求预先导出、审阅或锁定 GCode 文件。
 
+**固件兼容提示（2026-10-19）：**本机实测版本组合为 System/NEJE/GRBL **2.3.2/2.3.2/2.3.2**。升级到三项 2.4.0 后，旧 BLE GRBL 状态查询失答；回退并完整重启后，USB、BLE 通道和真实 LightBurn 初始化恢复，但尚未重新加工。其他版本未验证。[版本核对与处理](firmware-compatibility.md) · [回退验收](firmware-rollback-decision-20261019.md)
+
 ## 首次设置
 
 1. 安装 [macOS arm64 构建产物](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml)中的 **NEJE Bridge.app**。1.3.0 双语包的发布状态见[当前状态](overall-progress.md)。
-2. NEJE 上电，确认没有其他软件占用设备或本机 `4002` 端口。
+2. NEJE 上电，确认三项固件版本及 GRBL 模式符合[已验证范围](firmware-compatibility.md)，且没有其他软件占用设备或本机 `4002` 端口。
 3. 打开 NEJE Bridge，选择机器，点 **启动桥接**。
 4. 若 LightBurn 尚无桥接设备，保存工程并退出 LightBurn，再点 **创建 LightBurn 设备**。程序会备份原配置；重新打开 LightBurn 后选择新增设备。
 5. 核对设备为 **GRBL / TCP、127.0.0.1:4002**，工作范围和原点与机器一致。连接后应看到真实设备响应和 Ready；设备列表里出现名称本身不代表已连通。
@@ -24,6 +26,7 @@
 | 现象 | 先检查 |
 | --- | --- |
 | LightBurn 连不上 | 程序是否显示桥接运行；设备是否选 GRBL/TCP、`127.0.0.1:4002`。不要同时开两个桥接。 |
+| 固件更新后桥接无法初始化 | 核对 System/NEJE/GRBL 三项版本并保留日志；本机三项 2.4.0 时曾出现 BLE `0x40` 失答。不要绕过状态检查或反复点击 Start。[兼容范围](firmware-compatibility.md) |
 | 设备显示非 GRBL 模式，USB 与蓝牙都连不上 | 停止操作；确认设备未运动后，完全断开设备电源和设备端 USB 至少 10 秒，再先接电源、后接 USB。重启后先查模式和位置，不连续点击 Start/Home。[现场案例](connection-recovery-20261018.md) |
 | Ready，但 Start 完全无动作 | 先别反复点击。看 LightBurn 预览是否有路径和非零时长；若工程图片丢失，重新导入并保存可重开的工程。预览正常时，再看桥接日志是否收到作业。[图片诊断](image-job-no-start-20261015.md) |
 | 百分比到 100%，机器还在动 | LightBurn 显示的是命令传送进度，不是机械完成比例；以设备真实 `Idle` 和现场动作结束为准。[界面说明](https://docs.lightburnsoftware.com/latest/Reference/LaserWindow/) |
