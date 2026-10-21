@@ -10,7 +10,7 @@ Use a NEJE 5 Plus in LightBurn over Bluetooth. The Mac app exposes the machine a
 
 ## Start
 
-1. On an Apple Silicon Mac, download `NEJE-Bridge-macOS-arm64` from the [macOS build workflow](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml). Version 1.3.0 is available as a workflow artifact; the formal Release was still 1.2.4 at the last check on 2026-10-18. The app is not Apple-notarized, and an Intel GUI build has not been verified.
+1. On an Apple Silicon Mac, download `NEJE-Bridge-1.3.0-macOS-arm64.zip` from the [v1.3.0 Release](https://github.com/Tingfe/neje-lightburn-bridge/releases/tag/v1.3.0). The app supports Chinese and English; it is not Apple-notarized, and an Intel GUI build has not been verified. Check the ZIP against the release's `SHA256SUMS.txt` before installing.
 2. Open **NEJE Bridge.app**, choose **English** if desired, and click **Start bridge**.
 3. For first-time setup, save your LightBurn work and quit LightBurn, then click **Create LightBurn device**. Later, choose the created device and connect normally.
 4. Confirm the selected LightBurn device is **GRBL / TCP**, address `127.0.0.1`, port `4002`. Start jobs from LightBurn as usual.

@@ -10,7 +10,7 @@
 
 ## 开始使用
 
-1. Apple Silicon Mac 从 [macOS 自动构建](https://github.com/Tingfe/neje-lightburn-bridge/actions/workflows/macos-build.yml)下载 `NEJE-Bridge-macOS-arm64`，安装并打开 **NEJE Bridge.app**。1.3.0 双语版已生成工作流产物；截至 2026-10-18，正式 Release 仍为 1.2.4。应用尚未经过 Apple 公证，Intel 图形包未验证。
+1. Apple Silicon Mac 从 [v1.3.0 Release](https://github.com/Tingfe/neje-lightburn-bridge/releases/tag/v1.3.0) 下载 `NEJE-Bridge-1.3.0-macOS-arm64.zip`，解压并打开 **NEJE Bridge.app**。此版可切换中文和 English；应用尚未经过 Apple 公证，Intel 图形包未验证。安装前可用同页 `SHA256SUMS.txt` 校验。
 2. 确认 NEJE 已上电并处于 GRBL 模式，打开程序，点 **启动桥接**。
 3. 首次使用时，先保存并退出 LightBurn，再点程序里的 **创建 LightBurn 设备**。以后直接选用该设备。
 4. 在 LightBurn 连接设备：**GRBL / TCP、127.0.0.1、端口 4002**。确认收到真实设备响应后，就可以照常预览和开始作业。

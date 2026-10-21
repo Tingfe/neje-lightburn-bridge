@@ -20,6 +20,7 @@
 | 2.4.0 升级后 BLE 失答与 2.3.2 回退验收 | [连接诊断](connection-init-race-20261019.md) · [固件回退验收](firmware-rollback-decision-20261019.md) |
 | 停止、失联与缓冲动作 | [运动停止](lightburn-motion-stop-hardware-result.md) · [作业断连](job-disconnect-result.md) |
 | 图形应用和双语包 | [本机打包](gui-mac-package-result.md) · [双语与云端构建](bilingual-gui-20261018.md) |
+| v1.3.0 正式包与校验 | [发布核验](release-v1.3.0-20261021.md) |
 | 气辅扩展 | [自动气辅方案](neje5-auto-air-assist-20261018.md)；尚未做实体阀验收 |
 
 ## 历史与其他工作
